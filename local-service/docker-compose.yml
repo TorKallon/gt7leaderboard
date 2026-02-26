@@ -1,0 +1,19 @@
+services:
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "33740:33740/udp"   # GT7 telemetry listen
+      - "8080:8080"          # Local web UI
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data     # Persistent cache for car/track data
+    environment:
+      - DD_API_KEY=${DD_API_KEY:-}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

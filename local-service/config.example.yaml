@@ -1,0 +1,42 @@
+# GT7 Collector Configuration
+# Copy this file to config.yaml and fill in your values.
+
+playstation:
+  ip: "192.168.1.100"         # PS5 IP address on your local network
+  telemetry_send_port: 33739   # GT7 telemetry port (do not change)
+  telemetry_listen_port: 33740 # Local UDP listen port (do not change)
+
+psn:
+  npsso_token: ""              # Set via web UI at http://localhost:8080/auth
+  accounts:
+    - online_id: "your_psn_id"
+      driver_name: "Player 1"
+    # - online_id: "another_psn_id"
+    #   driver_name: "Player 2"
+
+api:
+  endpoint: "https://gt7.mcnamara.io"
+  api_key: "your-shared-secret-here"
+
+discord:
+  webhook_url: ""              # Discord webhook URL (optional)
+  notify_overall_records: true
+  notify_category_records: true
+  notify_car_records: false
+
+datadog:
+  enabled: false
+  api_key: ""
+  site: "datadoghq.com"
+  service: "gt7-collector"
+  env: "production"
+
+session:
+  idle_timeout_seconds: 30
+  track_detection_min_points: 300
+
+data_refresh:
+  car_data_url: "https://ddm999.github.io/gt7info/data-stock-perf.csv"
+  car_refresh_interval_hours: 24
+  track_data_repo: "profittlich/gt7speedboard"
+  track_refresh_interval_hours: 168
