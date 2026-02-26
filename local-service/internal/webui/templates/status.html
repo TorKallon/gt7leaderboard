@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GT7 Leaderboard - Local Service</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; background: #1a1a2e; color: #eee; }
+        h1 { color: #e94560; }
+        .card { background: #16213e; border-radius: 8px; padding: 20px; margin: 16px 0; }
+        .card h2 { margin-top: 0; color: #0f3460; color: #e94560; font-size: 1.1em; }
+        .label { color: #888; font-size: 0.9em; }
+        .value { font-weight: bold; margin-bottom: 8px; }
+        .warning { background: #e94560; color: #fff; padding: 12px 16px; border-radius: 8px; margin: 16px 0; }
+        .no-session { color: #888; font-style: italic; }
+        a { color: #e94560; }
+        .status-ok { color: #4ecca3; }
+    </style>
+</head>
+<body>
+    <h1>GT7 Leaderboard</h1>
+
+    <div class="card">
+        <h2>Service Status</h2>
+        <div class="label">Status</div>
+        <div class="value status-ok">Running</div>
+        <div class="label">Uptime</div>
+        <div class="value">{{.Uptime}}</div>
+    </div>
+
+    <div class="card">
+        <h2>Current Session</h2>
+        {{if .HasSession}}
+        <div class="label">Driver</div>
+        <div class="value">{{if .DriverName}}{{.DriverName}}{{else}}Unknown{{end}}</div>
+        <div class="label">Track</div>
+        <div class="value">{{if .TrackName}}{{.TrackName}}{{else}}Detecting...{{end}}</div>
+        <div class="label">Car ID</div>
+        <div class="value">{{.CarID}}</div>
+        <div class="label">Current Lap</div>
+        <div class="value">{{.LastLap}}</div>
+        <div class="label">Started</div>
+        <div class="value">{{.SessionStarted}}</div>
+        {{else}}
+        <div class="no-session">No active session</div>
+        {{end}}
+    </div>
+
+    {{if .PSNTokenWarning}}
+    <div class="warning">
+        {{if .PSNTokenMessage}}{{.PSNTokenMessage}}{{else}}PSN token expires in {{.PSNTokenDays}} days. Please renew your NPSSO token.{{end}}
+    </div>
+    {{end}}
+
+    <div class="card">
+        <h2>PSN Token</h2>
+        {{if gt .PSNTokenDays 0}}
+        <div class="label">Days Until Expiry</div>
+        <div class="value">{{.PSNTokenDays}}</div>
+        {{else}}
+        <div class="no-session">No PSN token configured</div>
+        {{end}}
+        <p><a href="/auth">Update NPSSO Token</a></p>
+    </div>
+</body>
+</html>
