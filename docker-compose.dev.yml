@@ -27,6 +27,8 @@ services:
       AUTH_URL: http://localhost:3001
       AUTH_TRUST_HOST: "true"
       INGEST_API_KEY: dev-ingest-key
+      ALLOWED_DOMAIN: mcnamara.io
+      ALLOWED_EMAILS: rourkem@rourkem.com
       # Leave GOOGLE_CLIENT_ID unset to skip OAuth in dev
     depends_on:
       postgres:
