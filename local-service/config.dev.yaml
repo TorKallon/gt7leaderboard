@@ -1,0 +1,32 @@
+playstation:
+  ip: "192.168.1.100"
+  send_port: 33739
+  listen_port: 33740
+
+psn:
+  npsso_token: ""
+  accounts:
+    - online_id: "dev_player"
+      driver_name: "Dev Player"
+
+api:
+  endpoint: "http://web:3000"
+  api_key: "dev-ingest-key"
+
+discord:
+  webhook_url: ""
+  notify_overall_records: true
+  notify_category_records: true
+  notify_car_records: false
+
+datadog:
+  enabled: false
+
+session:
+  idle_timeout_seconds: 30
+
+data_refresh:
+  car_data_url: "https://ddm999.github.io/gt7info/data-stock-perf.csv"
+  car_refresh_interval_hours: 24
+  track_data_repo: "profittlich/gt7speedboard"
+  track_refresh_interval_hours: 168
