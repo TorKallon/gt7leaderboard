@@ -1,0 +1,23 @@
+# Go
+local-service/collector
+local-service/update-data
+local-service/data/cache/
+
+# Node
+web/node_modules/
+web/.next/
+web/.env.local
+web/.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Secrets
+*.env
+config.yaml
+!config.example.yaml
