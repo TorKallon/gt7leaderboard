@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: gt7leaderboard
+      POSTGRES_USER: gt7
+      POSTGRES_PASSWORD: gt7dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gt7 -d gt7leaderboard"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://gt7:gt7dev@postgres:5432/gt7leaderboard
+      AUTH_SECRET: dev-secret-do-not-use-in-production-1234567890
+      AUTH_URL: http://localhost:3001
+      AUTH_TRUST_HOST: "true"
+      INGEST_API_KEY: dev-ingest-key
+      # Leave GOOGLE_CLIENT_ID unset to skip OAuth in dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  collector:
+    build:
+      context: ./local-service
+    ports:
+      - "33740:33740/udp"
+      - "8081:8080"
+    volumes:
+      - ./local-service/config.dev.yaml:/app/config.yaml:ro
+      - ./local-service/data:/app/data
+    depends_on:
+      - web
+
+volumes:
+  pgdata:

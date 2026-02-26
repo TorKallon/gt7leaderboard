@@ -14,6 +14,11 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // In dev without Google OAuth configured, skip authentication
+  if (!process.env.GOOGLE_CLIENT_ID) {
+    return NextResponse.next();
+  }
+
   // Redirect unauthenticated users to sign-in
   if (!req.auth) {
     const signInUrl = new URL('/api/auth/signin', req.nextUrl.origin);
