@@ -1,103 +1,120 @@
-import Image from "next/image";
+import Link from 'next/link';
+import { db } from '@/lib/db';
+import { getRecentLaps } from '@/lib/db/queries';
+import { sql } from 'drizzle-orm';
+import { StatCard } from '@/components/stat-card';
+import { ActivityFeed, type ActivityItem } from '@/components/activity-feed';
+import { CollectorStatus, type CollectorStatusData } from '@/components/collector-status';
 
-export default function Home() {
+async function getDashboardStats() {
+  try {
+    const result = await db.execute(sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM lap_records) AS total_laps,
+        (SELECT COUNT(DISTINCT track_id)::int FROM lap_records) AS tracks_driven,
+        (SELECT COUNT(DISTINCT driver_id)::int FROM lap_records WHERE driver_id IS NOT NULL) AS active_drivers,
+        (SELECT COUNT(*)::int FROM sessions WHERE driver_id IS NULL) AS unclaimed_sessions
+    `);
+    return result.rows[0] as {
+      total_laps: number;
+      tracks_driven: number;
+      active_drivers: number;
+      unclaimed_sessions: number;
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getCollectorStatus(): Promise<CollectorStatusData> {
+  try {
+    const result = await db.execute(sql`
+      SELECT status, current_session_id, uptime_seconds, received_at
+      FROM collector_heartbeats
+      ORDER BY received_at DESC
+      LIMIT 1
+    `);
+
+    if (result.rows.length === 0) {
+      return { collector_online: false, last_heartbeat: null };
+    }
+
+    const latest = result.rows[0] as {
+      status: string;
+      received_at: string;
+      uptime_seconds: number | null;
+    };
+    const receivedAt = new Date(latest.received_at);
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+
+    return {
+      collector_online: receivedAt > twoMinutesAgo,
+      last_heartbeat: receivedAt.toISOString(),
+      uptime_seconds: latest.uptime_seconds,
+    };
+  } catch {
+    return { collector_online: false, last_heartbeat: null };
+  }
+}
+
+async function fetchRecentLaps(): Promise<ActivityItem[]> {
+  try {
+    const rows = await getRecentLaps(db, { limit: 20 });
+    return rows as unknown as ActivityItem[];
+  } catch {
+    return [];
+  }
+}
+
+export default async function DashboardPage() {
+  const [stats, collectorData, recentLaps] = await Promise.all([
+    getDashboardStats(),
+    getCollectorStatus(),
+    fetchRecentLaps(),
+  ]);
+
+  const hasData = stats !== null;
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-white">Dashboard</h1>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Unclaimed sessions alert */}
+      {hasData && stats.unclaimed_sessions > 0 && (
+        <div className="rounded-lg bg-orange-900/20 border border-orange-700/40 px-4 py-3">
+          <p className="text-sm text-orange-300">
+            <span className="font-semibold">{stats.unclaimed_sessions}</span>{' '}
+            session{stats.unclaimed_sessions !== 1 ? 's' : ''} with unknown
+            driver.{' '}
+            <Link href="/sessions" className="underline hover:text-orange-200">
+              Review sessions
+            </Link>
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
+
+      {/* Stat cards + collector status */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Laps"
+          value={hasData ? stats.total_laps : '--'}
+          subtitle={hasData ? undefined : 'No data yet'}
+        />
+        <StatCard
+          label="Tracks Driven"
+          value={hasData ? stats.tracks_driven : '--'}
+          subtitle={hasData ? undefined : 'No data yet'}
+        />
+        <StatCard
+          label="Active Drivers"
+          value={hasData ? stats.active_drivers : '--'}
+          subtitle={hasData ? undefined : 'No data yet'}
+        />
+        <CollectorStatus data={collectorData} />
+      </div>
+
+      {/* Recent activity */}
+      <ActivityFeed items={recentLaps} />
     </div>
   );
 }
