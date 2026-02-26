@@ -119,7 +119,7 @@ func TestRecordLap(t *testing.T) {
 
 func TestEndSession(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/ingest/sessions/end" {
+		if r.URL.Path != "/api/ingest/sessions/session-abc/end" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer test-api-key" {
@@ -127,15 +127,11 @@ func TestEndSession(t *testing.T) {
 		}
 
 		var body struct {
-			SessionID string `json:"session_id"`
-			EndedAt   string `json:"ended_at"`
+			EndedAt string `json:"ended_at"`
 		}
 		raw, _ := io.ReadAll(r.Body)
 		json.Unmarshal(raw, &body)
 
-		if body.SessionID != "session-abc" {
-			t.Errorf("unexpected session_id: %q", body.SessionID)
-		}
 		if body.EndedAt == "" {
 			t.Error("expected non-empty ended_at")
 		}

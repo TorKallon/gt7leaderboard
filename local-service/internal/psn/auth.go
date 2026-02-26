@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Client handles PSN OAuth authentication and API requests.
 type Client struct {
 	httpClient   *http.Client
+	mu           sync.Mutex
 	tokens       *Tokens
 	authorizeURL string
 	tokenURL     string
@@ -53,6 +55,9 @@ type tokenResponse struct {
 // Step 1: Exchange NPSSO for an authorization code via the authorize endpoint.
 // Step 2: Exchange the authorization code for access and refresh tokens.
 func (c *Client) AuthenticateWithNPSSO(npsso string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// Step 1: Get authorization code
 	code, err := c.getAuthCode(npsso)
 	if err != nil {
@@ -154,6 +159,13 @@ func (c *Client) exchangeCodeForTokens(code string) error {
 
 // RefreshAccessToken uses the refresh token to obtain a new access token.
 func (c *Client) RefreshAccessToken() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.refreshAccessTokenLocked()
+}
+
+// refreshAccessTokenLocked performs token refresh. Must be called with c.mu held.
+func (c *Client) refreshAccessTokenLocked() error {
 	if c.tokens.RefreshToken == "" {
 		return fmt.Errorf("no refresh token available")
 	}
@@ -199,21 +211,27 @@ func (c *Client) RefreshAccessToken() error {
 
 // SetTokens restores previously saved tokens.
 func (c *Client) SetTokens(tokens *Tokens) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.tokens = tokens
 }
 
-// GetTokens returns the current tokens.
+// GetTokens returns a copy of the current tokens.
 func (c *Client) GetTokens() *Tokens {
-	return c.tokens
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	t := *c.tokens
+	return &t
 }
 
 // ensureValidToken checks if the access token is still valid and refreshes it if needed.
+// Must be called with c.mu held.
 func (c *Client) ensureValidToken() error {
 	if c.tokens.AccessToken == "" {
 		return fmt.Errorf("no access token available")
 	}
 	if time.Now().After(c.tokens.AccessTokenExpiresAt) {
-		return c.RefreshAccessToken()
+		return c.refreshAccessTokenLocked()
 	}
 	return nil
 }

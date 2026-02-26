@@ -16,18 +16,23 @@ var profileBaseURL = "https://us-prof.np.community.playstation.net/userProfile/v
 
 // GetBulkPresence fetches the presence status for one or more PSN account IDs.
 func (c *Client) GetBulkPresence(accountIDs []string) ([]BasicPresence, error) {
+	c.mu.Lock()
 	if err := c.ensureValidToken(); err != nil {
+		c.mu.Unlock()
 		return nil, fmt.Errorf("ensuring valid token: %w", err)
 	}
+	accessToken := c.tokens.AccessToken
+	c.mu.Unlock()
 
 	ids := strings.Join(accountIDs, ",")
+	// Note: the double slash in the URL path is intentional and matches the PSN API format.
 	reqURL := presenceBaseURL + "//basicPresences?accountIds=" + ids
 
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating presence request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokens.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -99,9 +104,13 @@ type profileResponse struct {
 
 // ResolveOnlineID converts a PSN online ID (gamertag) to the numeric account ID.
 func (c *Client) ResolveOnlineID(onlineID string) (string, error) {
+	c.mu.Lock()
 	if err := c.ensureValidToken(); err != nil {
+		c.mu.Unlock()
 		return "", fmt.Errorf("ensuring valid token: %w", err)
 	}
+	accessToken := c.tokens.AccessToken
+	c.mu.Unlock()
 
 	reqURL := fmt.Sprintf(profileBaseURL+"/%s/profile2", onlineID)
 
@@ -109,7 +118,7 @@ func (c *Client) ResolveOnlineID(onlineID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("creating profile request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokens.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -34,20 +34,7 @@ export async function POST(request: Request) {
 
     const session = sessionRows[0];
 
-    const result = await db
-      .insert(lapRecords)
-      .values({
-        sessionId: session_id,
-        driverId: session.driverId,
-        trackId: session.trackId,
-        carId: session.carId,
-        lapTimeMs: lap_time_ms,
-        lapNumber: lap_number,
-        recordedAt: new Date(recorded_at),
-      })
-      .returning({ id: lapRecords.id });
-
-    // Check for records if we have track and car info
+    // Check for records BEFORE inserting so the new lap doesn't affect the query.
     let records: Array<{
       type: string;
       previous_time_ms: number | null;
@@ -67,6 +54,19 @@ export async function POST(request: Request) {
         previous_driver: r.previousDriver,
       }));
     }
+
+    const result = await db
+      .insert(lapRecords)
+      .values({
+        sessionId: session_id,
+        driverId: session.driverId,
+        trackId: session.trackId,
+        carId: session.carId,
+        lapTimeMs: lap_time_ms,
+        lapNumber: lap_number,
+        recordedAt: new Date(recorded_at),
+      })
+      .returning({ id: lapRecords.id });
 
     return NextResponse.json({
       lap_id: result[0].id,

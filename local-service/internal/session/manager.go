@@ -251,8 +251,8 @@ func (m *Manager) handleLapCompletionLocked(pkt *telemetry.Packet, now time.Time
 		return
 	}
 
-	// Skip if game is paused or loading.
-	if pkt.IsPaused || pkt.IsLoading {
+	// Skip if not in a race or game is paused/loading.
+	if !pkt.InRace || pkt.IsPaused || pkt.IsLoading {
 		return
 	}
 

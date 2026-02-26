@@ -108,13 +108,11 @@ func (c *Client) RecordLap(req RecordLapRequest) (*RecordLapResponse, error) {
 // EndSession marks a session as ended.
 func (c *Client) EndSession(sessionID string, endedAt time.Time) error {
 	body := struct {
-		SessionID string `json:"session_id"`
-		EndedAt   string `json:"ended_at"`
+		EndedAt string `json:"ended_at"`
 	}{
-		SessionID: sessionID,
-		EndedAt:   endedAt.UTC().Format(time.RFC3339),
+		EndedAt: endedAt.UTC().Format(time.RFC3339),
 	}
-	return c.doPost("/api/ingest/sessions/end", body, nil)
+	return c.doPost("/api/ingest/sessions/"+sessionID+"/end", body, nil)
 }
 
 // SendHeartbeat sends a service heartbeat.

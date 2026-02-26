@@ -80,8 +80,10 @@ async function getSessionDetail(
 }
 
 const DETECTION_LABELS: Record<string, string> = {
+  telemetry: 'Telemetry',
+  forward: 'Forward Direction',
+  reverse: 'Reverse Direction',
   psn: 'PSN Detection',
-  schedule: 'Schedule',
   manual: 'Manual',
   unmatched: 'Unmatched',
 };

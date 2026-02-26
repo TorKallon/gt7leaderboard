@@ -289,6 +289,24 @@ func TestLoadingLapsDiscarded(t *testing.T) {
 	}
 }
 
+func TestNotInRaceLapsDiscarded(t *testing.T) {
+	apiClient := &mockAPIClient{}
+	trackDet := &mockTrackDetector{}
+	mgr := newTestManager(apiClient, nil, trackDet, nil)
+
+	mgr.HandlePacket(makePacket(100, 1, 0))
+	mgr.HandlePacket(makePacket(100, 2, 65000)) // first lap, skipped
+
+	// Not in race (e.g. in menus or photo mode)
+	pkt := makePacket(100, 3, 72000)
+	pkt.InRace = false
+	mgr.HandlePacket(pkt)
+
+	if len(apiClient.recordCalls) != 0 {
+		t.Fatalf("expected 0 RecordLap calls for not-in-race lap, got %d", len(apiClient.recordCalls))
+	}
+}
+
 func TestCarChangeTriggersNewSession(t *testing.T) {
 	apiClient := &mockAPIClient{
 		createResp: &api.CreateSessionResponse{SessionID: "session-1"},
