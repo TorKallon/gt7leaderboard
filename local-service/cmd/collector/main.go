@@ -25,7 +25,7 @@ import (
 const (
 	heartbeatInterval = 60 * time.Second
 	idleCheckInterval = 5 * time.Second
-	defaultWebUIAddr  = ":8080"
+	defaultWebUIAddr  = ":8081"
 )
 
 func main() {
@@ -101,8 +101,22 @@ func main() {
 		if err := psnClient.AuthenticateWithNPSSO(cfg.PSN.NpssoToken); err != nil {
 			log.Printf("Warning: PSN authentication failed: %v", err)
 		} else {
-			tokens := psnClient.GetTokens()
-			log.Printf("PSN authenticated, refresh token expires in %d days", tokens.DaysUntilRefreshExpiry())
+			if tokens := psnClient.GetTokens(); tokens != nil {
+				log.Printf("PSN authenticated, refresh token expires in %d days", tokens.DaysUntilRefreshExpiry())
+			}
+
+			// Resolve online IDs to numeric account IDs for presence lookups.
+			for i, a := range psnAccounts {
+				if a.AccountID == "" && a.OnlineID != "" {
+					accountID, err := psnClient.ResolveOnlineID(a.OnlineID)
+					if err != nil {
+						log.Printf("Warning: could not resolve account ID for %s: %v", a.OnlineID, err)
+					} else {
+						psnAccounts[i].AccountID = accountID
+						log.Printf("Resolved %s -> account ID %s", a.OnlineID, accountID)
+					}
+				}
+			}
 		}
 	} else {
 		log.Printf("No PSN NPSSO token configured, driver detection will be unavailable")
@@ -113,8 +127,10 @@ func main() {
 
 	// 8. Initialize Discord client.
 	var discordClient *discord.Client
+	var notifier session.NotificationSender
 	if cfg.Discord.WebhookURL != "" {
 		discordClient = discord.NewClient(cfg.Discord.WebhookURL)
+		notifier = discordClient
 		log.Printf("Discord notifications enabled")
 	}
 
@@ -127,7 +143,7 @@ func main() {
 		apiClient,
 		psnClient,
 		trackDetector,
-		discordClient,
+		notifier,
 		carDB,
 		m,
 		psnAccounts,
@@ -161,23 +177,43 @@ func main() {
 
 	// 13. Start heartbeat sender.
 	startTime := time.Now()
+	sendHeartbeat := func() {
+		hbReq := api.HeartbeatRequest{
+			Status:        "running",
+			UptimeSeconds: int(time.Since(startTime).Seconds()),
+		}
+		if sess := sessionMgr.CurrentSession(); sess != nil {
+			hbReq.CurrentSessionID = sess.ID
+		}
+		if err := apiClient.SendHeartbeat(hbReq); err != nil {
+			log.Printf("Heartbeat error: %v", err)
+		}
+	}
 	go func() {
+		sendHeartbeat() // Send immediately on startup.
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
+		var lastReminderDay int
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				hbReq := api.HeartbeatRequest{
-					Status:        "running",
-					UptimeSeconds: int(time.Since(startTime).Seconds()),
-				}
-				if sess := sessionMgr.CurrentSession(); sess != nil {
-					hbReq.CurrentSessionID = sess.ID
-				}
-				if err := apiClient.SendHeartbeat(hbReq); err != nil {
-					log.Printf("Heartbeat error: %v", err)
+				sendHeartbeat()
+				// Check PSN token expiry once per day and send Discord reminder.
+				today := time.Now().YearDay()
+				if today != lastReminderDay {
+					if tokens := psnClient.GetTokens(); tokens != nil && !tokens.RefreshTokenExpiresAt.IsZero() {
+						if needs, msg := tokens.NeedsReminder(); needs {
+							log.Printf("WARNING: %s", msg)
+							if discordClient != nil {
+								if err := discordClient.SendMessage("⚠️ " + msg); err != nil {
+									log.Printf("Discord reminder error: %v", err)
+								}
+							}
+							lastReminderDay = today
+						}
+					}
 				}
 			}
 		}
@@ -206,7 +242,11 @@ func main() {
 	)
 
 	log.Printf("GT7 Collector starting...")
-	log.Printf("  PlayStation IP: %s", cfg.PlayStation.IP)
+	if cfg.PlayStation.IP != "" {
+		log.Printf("  PlayStation IP: %s", cfg.PlayStation.IP)
+	} else {
+		log.Printf("  PlayStation IP: broadcast auto-discovery")
+	}
 	log.Printf("  Send port: %d, Listen port: %d", cfg.PlayStation.SendPort, cfg.PlayStation.ListenPort)
 	log.Printf("  API endpoint: %s", cfg.API.Endpoint)
 	log.Printf("  Web UI: %s", defaultWebUIAddr)

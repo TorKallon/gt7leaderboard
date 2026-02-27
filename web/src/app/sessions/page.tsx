@@ -50,6 +50,8 @@ async function fetchSessions(limit: number): Promise<SessionListItem[]> {
 }
 
 const DETECTION_BADGES: Record<string, { label: string; className: string }> = {
+  forward: { label: 'GPS Match', className: 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40' },
+  reverse: { label: 'GPS (Reverse)', className: 'bg-teal-900/40 text-teal-300 border-teal-700/40' },
   psn: { label: 'PSN', className: 'bg-blue-900/40 text-blue-300 border-blue-700/40' },
   schedule: { label: 'Schedule', className: 'bg-purple-900/40 text-purple-300 border-purple-700/40' },
   manual: { label: 'Manual', className: 'bg-green-900/40 text-green-300 border-green-700/40' },
