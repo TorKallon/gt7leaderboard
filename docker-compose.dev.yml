@@ -34,17 +34,5 @@ services:
       postgres:
         condition: service_healthy
 
-  collector:
-    build:
-      context: ./local-service
-    ports:
-      - "33740:33740/udp"
-      - "8081:8080"
-    volumes:
-      - ./local-service/config.dev.yaml:/app/config.yaml:ro
-      - ./local-service/data:/app/data
-    depends_on:
-      - web
-
 volumes:
   pgdata:

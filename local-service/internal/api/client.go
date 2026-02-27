@@ -28,10 +28,17 @@ func NewClient(endpoint, apiKey string) *Client {
 // CreateSessionRequest is the request body for creating a new session.
 type CreateSessionRequest struct {
 	DriverID        string `json:"driver_id,omitempty"`
+	DriverName      string `json:"driver_name,omitempty"`
 	TrackSlug       string `json:"track_slug,omitempty"`
 	CarID           int    `json:"car_id"`
 	StartedAt       string `json:"started_at"`
 	DetectionMethod string `json:"detection_method"`
+}
+
+// UpdateSessionRequest is the request body for updating a session.
+type UpdateSessionRequest struct {
+	TrackSlug       string `json:"track_slug,omitempty"`
+	DetectionMethod string `json:"detection_method,omitempty"`
 }
 
 // CreateSessionResponse is the response from session creation.
@@ -94,6 +101,11 @@ func (c *Client) CreateSession(req CreateSessionRequest) (*CreateSessionResponse
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// UpdateSession updates a session with track or detection info.
+func (c *Client) UpdateSession(sessionID string, req UpdateSessionRequest) error {
+	return c.doPost("/api/ingest/sessions/"+sessionID+"/update", req, nil)
 }
 
 // RecordLap records a lap in an existing session.

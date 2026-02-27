@@ -2,7 +2,7 @@
 # Copy this file to config.yaml and fill in your values.
 
 playstation:
-  ip: "192.168.1.100"         # PS5 IP address on your local network
+  ip: ""                       # PS5 IP address (leave empty for broadcast auto-discovery)
   telemetry_send_port: 33739   # GT7 telemetry port (do not change)
   telemetry_listen_port: 33740 # Local UDP listen port (do not change)
 

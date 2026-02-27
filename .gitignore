@@ -1,7 +1,8 @@
 # Go
 local-service/collector
 local-service/update-data
-local-service/data/cache/
+local-service/bin/
+local-service/data/
 
 # Node
 web/node_modules/
@@ -20,4 +21,5 @@ web/.env
 # Secrets
 *.env
 config.yaml
+config.dev.yaml
 !config.example.yaml
