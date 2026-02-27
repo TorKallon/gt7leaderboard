@@ -18,8 +18,10 @@ import (
 // APIClient is the interface for the hosted API.
 type APIClient interface {
 	CreateSession(api.CreateSessionRequest) (*api.CreateSessionResponse, error)
+	UpdateSession(string, api.UpdateSessionRequest) error
 	RecordLap(api.RecordLapRequest) (*api.RecordLapResponse, error)
 	EndSession(string, time.Time) error
+	SyncTrack(api.TrackSync) error
 }
 
 // DriverDetector identifies which PSN account is currently driving.
@@ -64,10 +66,12 @@ type Manager struct {
 	psnAccounts   []psn.AccountConfig
 	discordConfig config.DiscordConfig
 
-	mu             sync.Mutex
-	currentSession *ActiveSession
-	lastPacketTime time.Time
-	idleTimeout    time.Duration
+	mu                  sync.Mutex
+	currentSession      *ActiveSession
+	lastPacketTime      time.Time
+	idleTimeout         time.Duration
+	lastCreateAttempt   time.Time
+	createRetryInterval time.Duration
 }
 
 // NewManager creates a new session Manager.
@@ -83,15 +87,16 @@ func NewManager(
 	idleTimeout time.Duration,
 ) *Manager {
 	return &Manager{
-		api:           apiClient,
-		driver:        driverDetector,
-		track:         trackDetector,
-		notifier:      notifier,
-		carDB:         carDB,
-		metrics:       m,
-		psnAccounts:   psnAccounts,
-		discordConfig: discordCfg,
-		idleTimeout:   idleTimeout,
+		api:                 apiClient,
+		driver:              driverDetector,
+		track:               trackDetector,
+		notifier:            notifier,
+		carDB:               carDB,
+		metrics:             m,
+		psnAccounts:         psnAccounts,
+		discordConfig:       discordCfg,
+		idleTimeout:         idleTimeout,
+		createRetryInterval: 10 * time.Second,
 	}
 }
 
@@ -108,22 +113,33 @@ func (m *Manager) CurrentSession() *ActiveSession {
 
 // HandlePacket processes a single telemetry packet.
 func (m *Manager) HandlePacket(pkt *telemetry.Packet) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("RECOVERED from panic in HandlePacket: %v", r)
+		}
+	}()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
 
-	// Check idle timeout: if we have a session and haven't received a packet
-	// for longer than the idle timeout, end the current session.
-	if m.currentSession != nil && !m.lastPacketTime.IsZero() &&
-		now.Sub(m.lastPacketTime) > m.idleTimeout {
-		m.endSessionLocked()
+	// Ignore non-racing packets (menus, replays, loading screens).
+	// These have CurrentLap=0 and would corrupt session state.
+	if pkt.CurrentLap == 0 && pkt.CarID == 0 {
+		return
 	}
 
-	// If no current session, start a new one.
+	// Update last packet time to prevent false idle timeouts.
+	// The CheckIdle() ticker uses this to detect when the PS5 actually stops sending data.
+	m.lastPacketTime = now
+
+	// If no current session, only start one when we're actually in a race.
 	if m.currentSession == nil {
-		m.startSessionLocked(pkt, now)
-	} else if pkt.CarID != m.currentSession.CarID {
+		if pkt.CurrentLap > 0 && now.Sub(m.lastCreateAttempt) >= m.createRetryInterval {
+			m.startSessionLocked(pkt, now)
+		}
+	} else if pkt.CarID != m.currentSession.CarID && pkt.CarID != 0 {
 		// Car changed: end current session and start a new one.
 		m.endSessionLocked()
 		m.startSessionLocked(pkt, now)
@@ -131,36 +147,78 @@ func (m *Manager) HandlePacket(pkt *telemetry.Packet) {
 
 	// Feed packet to track detector.
 	if m.currentSession != nil && m.currentSession.TrackSlug == "" {
-		if result := m.track.AddPoint(pkt); result != nil {
-			m.currentSession.TrackSlug = result.Track.Info.Slug
+		if result := m.track.AddPoint(pkt); result != nil && result.Track != nil {
+			slug := result.Track.Info.Slug
+			layout := result.Track.Info.Layout
+
 			m.currentSession.TrackName = result.Track.Info.Name
-			if result.Track.Info.Layout != "" {
-				m.currentSession.TrackName += " - " + result.Track.Info.Layout
+			if layout != "" {
+				m.currentSession.TrackName += " - " + layout
 			}
 			if result.IsReverse {
+				slug += "-reverse"
+				if layout != "" {
+					layout += " (Reverse)"
+				} else {
+					layout = "Reverse"
+				}
+				m.currentSession.TrackName += " (Reverse)"
 				m.currentSession.DetectionMethod = "reverse"
 			} else {
 				m.currentSession.DetectionMethod = "forward"
 			}
+			m.currentSession.TrackSlug = slug
 			log.Printf("Track detected: %s (slug: %s)", m.currentSession.TrackName, m.currentSession.TrackSlug)
+
+			// Sync the track to the DB (upsert) so it exists before we reference it.
+			trackSync := api.TrackSync{
+				Name:   result.Track.Info.Name,
+				Layout: layout,
+				Slug:   slug,
+			}
+			if err := m.api.SyncTrack(trackSync); err != nil {
+				log.Printf("Error syncing track to API: %v", err)
+			}
+
+			// Update the session in the API with the detected track.
+			updateReq := api.UpdateSessionRequest{
+				TrackSlug:       m.currentSession.TrackSlug,
+				DetectionMethod: m.currentSession.DetectionMethod,
+			}
+			if err := m.api.UpdateSession(m.currentSession.ID, updateReq); err != nil {
+				log.Printf("Error updating session with track: %v", err)
+			}
 		}
 	}
 
 	// Check for lap completion.
 	if m.currentSession != nil && pkt.CurrentLap > m.currentSession.LastLap && m.currentSession.LastLap > 0 {
+		log.Printf("[DEBUG] Lap completed: CurrentLap=%d LastLap=%d LastLapTime=%dms InRace=%v IsPaused=%v IsLoading=%v Flags=0x%02X",
+			pkt.CurrentLap, m.currentSession.LastLap, pkt.LastLapTime, pkt.InRace, pkt.IsPaused, pkt.IsLoading, pkt.Flags)
 		m.handleLapCompletionLocked(pkt, now)
 	}
 
-	// Update lap counter and last packet time.
-	if m.currentSession != nil {
+	// Log lap counter changes for debugging.
+	if m.currentSession != nil && pkt.CurrentLap != m.currentSession.LastLap {
+		log.Printf("[DEBUG] Lap counter changed: %d -> %d (LastLapTime=%dms InRace=%v Flags=0x%02X)",
+			m.currentSession.LastLap, pkt.CurrentLap, pkt.LastLapTime, pkt.InRace, pkt.Flags)
+	}
+
+	// Update lap counter (only forward — ignore resets to 0 during menus/replays).
+	if m.currentSession != nil && pkt.CurrentLap > 0 {
 		m.currentSession.LastLap = pkt.CurrentLap
 	}
-	m.lastPacketTime = now
 }
 
 // CheckIdle checks whether the current session has been idle too long and ends it if so.
 // This is intended to be called periodically from a ticker.
 func (m *Manager) CheckIdle() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("RECOVERED from panic in CheckIdle: %v", r)
+		}
+	}()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -187,6 +245,13 @@ func (m *Manager) startSessionLocked(pkt *telemetry.Packet, now time.Time) {
 			log.Printf("Warning: failed to identify driver: %v", err)
 		}
 	}
+	// Fallback: if presence detection failed, use the first configured account.
+	// This handles rate-limiting, API errors, and single-PS5 households.
+	// When multiple people play, presence will disambiguate on the next session.
+	if driverName == "" && len(m.psnAccounts) > 0 {
+		driverName = m.psnAccounts[0].DriverName
+		log.Printf("Driver fallback: defaulting to %s (presence unavailable)", driverName)
+	}
 
 	// Look up car name for logging.
 	carName := "Unknown"
@@ -199,10 +264,13 @@ func (m *Manager) startSessionLocked(pkt *telemetry.Packet, now time.Time) {
 	// Create session via API.
 	req := api.CreateSessionRequest{
 		DriverID:        driverID,
+		DriverName:      driverName,
 		CarID:           int(pkt.CarID),
 		StartedAt:       now.UTC().Format(time.RFC3339),
 		DetectionMethod: "telemetry",
 	}
+
+	m.lastCreateAttempt = now
 
 	resp, err := m.api.CreateSession(req)
 	if err != nil {
@@ -237,6 +305,7 @@ func (m *Manager) endSessionLocked() {
 	m.metrics.Incr("session.ended", nil)
 	log.Printf("Session ended: id=%s", sessionID)
 	m.currentSession = nil
+	m.lastCreateAttempt = time.Time{} // Allow immediate session creation after ending.
 }
 
 // handleLapCompletionLocked processes a completed lap. Must be called with mu held.
