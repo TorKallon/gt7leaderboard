@@ -116,6 +116,10 @@ func (d *Detector) AddPoint(pkt *telemetry.Packet) *DetectionResult {
 		}
 
 		// Find closest reference point (3D Euclidean distance).
+		if len(c.track.Points) == 0 {
+			c.eliminated = true
+			continue
+		}
 		closestIdx, closestDist := findClosestPoint(c.track.Points, pos)
 
 		// Eliminate if too far.

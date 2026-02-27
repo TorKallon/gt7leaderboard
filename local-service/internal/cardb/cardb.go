@@ -124,17 +124,26 @@ func LoadFromFile(path string) (*Database, error) {
 
 // Lookup returns the car with the given ID, or nil and false if not found.
 func (db *Database) Lookup(carID int) (*Car, bool) {
+	if db == nil {
+		return nil, false
+	}
 	car, ok := db.cars[carID]
 	return car, ok
 }
 
 // Count returns the number of cars in the database.
 func (db *Database) Count() int {
+	if db == nil {
+		return 0
+	}
 	return len(db.cars)
 }
 
 // All returns all cars in the database as a slice.
 func (db *Database) All() []*Car {
+	if db == nil {
+		return nil
+	}
 	result := make([]*Car, 0, len(db.cars))
 	for _, car := range db.cars {
 		result = append(result, car)

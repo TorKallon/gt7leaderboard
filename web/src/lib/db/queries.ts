@@ -183,6 +183,67 @@ export async function getRecentLaps(
 }
 
 /**
+ * Returns track records for specified categories (plus overall).
+ * Used to display a records summary on the track detail page.
+ */
+export async function getTrackRecords(
+  db: DB,
+  trackId: string,
+  categories: string[] = ['Gr.3']
+) {
+  // Overall record
+  const overallResult = await db.execute(sql`
+    SELECT lr.lap_time_ms, d.display_name AS driver_name, c.name AS car_name, c.category AS car_category, lr.recorded_at
+    FROM lap_records lr
+    JOIN drivers d ON d.id = lr.driver_id
+    JOIN cars c ON c.id = lr.car_id
+    WHERE lr.track_id = ${trackId} AND lr.is_valid = true
+    ORDER BY lr.lap_time_ms ASC
+    LIMIT 1
+  `);
+
+  const records: Array<{
+    label: string;
+    driver_name: string | null;
+    lap_time_ms: number | null;
+    car_name: string | null;
+    car_category: string | null;
+    recorded_at: string | null;
+  }> = [{
+    label: 'Overall',
+    driver_name: overallResult.rows.length > 0 ? overallResult.rows[0].driver_name as string : null,
+    lap_time_ms: overallResult.rows.length > 0 ? overallResult.rows[0].lap_time_ms as number : null,
+    car_name: overallResult.rows.length > 0 ? overallResult.rows[0].car_name as string : null,
+    car_category: overallResult.rows.length > 0 ? overallResult.rows[0].car_category as string : null,
+    recorded_at: overallResult.rows.length > 0 ? overallResult.rows[0].recorded_at as string : null,
+  }];
+
+  // Category records
+  for (const cat of categories) {
+    const catResult = await db.execute(sql`
+      SELECT lr.lap_time_ms, d.display_name AS driver_name, c.name AS car_name, c.category AS car_category, lr.recorded_at
+      FROM lap_records lr
+      JOIN drivers d ON d.id = lr.driver_id
+      JOIN cars c ON c.id = lr.car_id
+      WHERE lr.track_id = ${trackId} AND lr.is_valid = true AND c.category = ${cat}
+      ORDER BY lr.lap_time_ms ASC
+      LIMIT 1
+    `);
+
+    records.push({
+      label: cat,
+      driver_name: catResult.rows.length > 0 ? catResult.rows[0].driver_name as string : null,
+      lap_time_ms: catResult.rows.length > 0 ? catResult.rows[0].lap_time_ms as number : null,
+      car_name: catResult.rows.length > 0 ? catResult.rows[0].car_name as string : null,
+      car_category: catResult.rows.length > 0 ? catResult.rows[0].car_category as string : null,
+      recorded_at: catResult.rows.length > 0 ? catResult.rows[0].recorded_at as string : null,
+    });
+  }
+
+  return records;
+}
+
+/**
  * Check if a lap is an overall, category, or car record for the given track.
  * Returns an array of record types broken.
  */

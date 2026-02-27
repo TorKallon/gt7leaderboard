@@ -58,6 +58,9 @@ type webhookPayload struct {
 
 // SendRecordNotification posts a record notification embed to the Discord webhook.
 func (c *Client) SendRecordNotification(notif RecordNotification) error {
+	if c.webhookURL == "" {
+		return nil
+	}
 	title := fmt.Sprintf("New %s Record!", notif.RecordType)
 	description := fmt.Sprintf("**%s** set a new %s record on **%s**!",
 		notif.DriverName, notif.RecordType, notif.TrackName)
@@ -101,6 +104,31 @@ func (c *Client) SendRecordNotification(notif RecordNotification) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshaling webhook payload: %w", err)
+	}
+
+	resp, err := c.httpClient.Post(c.webhookURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("sending webhook: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// SendMessage posts a simple text message to the Discord webhook.
+func (c *Client) SendMessage(message string) error {
+	payload := struct {
+		Content string `json:"content"`
+	}{Content: message}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling message payload: %w", err)
 	}
 
 	resp, err := c.httpClient.Post(c.webhookURL, "application/json", bytes.NewReader(body))

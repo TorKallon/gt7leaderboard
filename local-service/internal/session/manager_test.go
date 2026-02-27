@@ -21,11 +21,13 @@ import (
 type mockAPIClient struct {
 	mu              sync.Mutex
 	createCalls     []api.CreateSessionRequest
+	updateCalls     []string
 	recordCalls     []api.RecordLapRequest
 	endCalls        []string
 	createResp      *api.CreateSessionResponse
 	recordResp      *api.RecordLapResponse
 	createErr       error
+	updateErr       error
 	recordErr       error
 	endErr          error
 }
@@ -41,6 +43,17 @@ func (m *mockAPIClient) CreateSession(req api.CreateSessionRequest) (*api.Create
 		return m.createResp, nil
 	}
 	return &api.CreateSessionResponse{SessionID: "test-session-1"}, nil
+}
+
+func (m *mockAPIClient) UpdateSession(id string, _ api.UpdateSessionRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.updateCalls = append(m.updateCalls, id)
+	return m.updateErr
+}
+
+func (m *mockAPIClient) SyncTrack(_ api.TrackSync) error {
+	return nil
 }
 
 func (m *mockAPIClient) RecordLap(req api.RecordLapRequest) (*api.RecordLapResponse, error) {
@@ -377,7 +390,7 @@ func TestIdleTimeoutEndsSession(t *testing.T) {
 	}
 }
 
-func TestIdleTimeoutOnNextPacket(t *testing.T) {
+func TestIdleTimeoutViaCheckIdle(t *testing.T) {
 	apiClient := &mockAPIClient{
 		createResp: &api.CreateSessionResponse{SessionID: "session-1"},
 	}
@@ -394,13 +407,17 @@ func TestIdleTimeoutOnNextPacket(t *testing.T) {
 	// Wait for idle timeout to expire.
 	time.Sleep(200 * time.Millisecond)
 
-	// Next packet should detect idle timeout, end old session, and start new one.
-	apiClient.createResp = &api.CreateSessionResponse{SessionID: "session-2"}
-	mgr.HandlePacket(makePacket(100, 1, 0))
+	// CheckIdle should detect the timeout and end the session.
+	mgr.CheckIdle()
 
 	if len(apiClient.endCalls) != 1 {
 		t.Fatalf("expected 1 EndSession call, got %d", len(apiClient.endCalls))
 	}
+
+	// Next packet should start a new session.
+	apiClient.createResp = &api.CreateSessionResponse{SessionID: "session-2"}
+	mgr.HandlePacket(makePacket(100, 1, 0))
+
 	if len(apiClient.createCalls) != 2 {
 		t.Fatalf("expected 2 CreateSession calls, got %d", len(apiClient.createCalls))
 	}

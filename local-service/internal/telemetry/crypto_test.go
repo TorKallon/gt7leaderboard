@@ -18,12 +18,13 @@ func encryptPacketForTest(plain []byte) []byte {
 	}
 
 	// Read IV seed that we placed in the plaintext at 0x40.
-	ivSeed := binary.LittleEndian.Uint32(plain[ivOffset : ivOffset+4])
+	iv1 := binary.LittleEndian.Uint32(plain[ivOffset : ivOffset+4])
 
 	// Build nonce the same way DecryptPacket does.
-	xored := ivSeed ^ ivXORMask
+	iv2 := iv1 ^ ivXORMask
 	var nonce [8]byte
-	binary.LittleEndian.PutUint32(nonce[:4], xored)
+	binary.LittleEndian.PutUint32(nonce[:4], iv2)
+	binary.LittleEndian.PutUint32(nonce[4:], iv1)
 
 	// Encrypt (Salsa20 XOR is symmetric).
 	out := make([]byte, PacketSize)
@@ -31,7 +32,7 @@ func encryptPacketForTest(plain []byte) []byte {
 	salsa20.XORKeyStream(out, out, nonce[:], &salsaKey)
 
 	// Restore IV seed in the ciphertext so DecryptPacket can read it.
-	binary.LittleEndian.PutUint32(out[ivOffset:ivOffset+4], ivSeed)
+	binary.LittleEndian.PutUint32(out[ivOffset:ivOffset+4], iv1)
 
 	return out
 }

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
-import { getTrackLeaderboard } from '@/lib/db/queries';
+import { getTrackLeaderboard, getTrackRecords } from '@/lib/db/queries';
 import { sql } from 'drizzle-orm';
+import { formatLapTime } from '@/components/lap-time';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { CategoryTabs } from '@/components/category-tabs';
@@ -84,9 +85,10 @@ export default async function TrackDetailPage({
   const category = sp.category ?? undefined;
   const carId = sp.car_id ? parseInt(sp.car_id, 10) : undefined;
 
-  const [leaderboard, cars] = await Promise.all([
+  const [leaderboard, cars, records] = await Promise.all([
     fetchLeaderboard(track.id, category, carId),
     getTrackCars(track.id),
+    getTrackRecords(db, track.id, ['Gr.3']),
   ]);
 
   return (
@@ -112,6 +114,39 @@ export default async function TrackDetailPage({
           )}
         </div>
       </div>
+
+      {/* Track Records */}
+      {records.some(r => r.lap_time_ms !== null) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {records.map((rec) => (
+            <div
+              key={rec.label}
+              className="rounded-lg bg-[#1f1f1f] border border-neutral-800 p-4"
+            >
+              <div className="text-xs text-neutral-500 mb-2">
+                {rec.label} Record
+              </div>
+              {rec.lap_time_ms != null ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-mono tabular-nums text-lg text-yellow-500 font-bold">
+                      {formatLapTime(rec.lap_time_ms)}
+                    </span>
+                    <div className="text-sm text-neutral-400 mt-0.5">
+                      {rec.driver_name}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-neutral-500">
+                    {rec.car_name}
+                  </div>
+                </div>
+              ) : (
+                <span className="text-sm text-neutral-600">No records yet</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">

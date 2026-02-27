@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"strings"
 )
 
 // presenceBaseURL can be overridden in tests.
@@ -14,8 +14,8 @@ var presenceBaseURL = "https://m.np.playstation.com/api/userProfile/v2/internal/
 // profileBaseURL can be overridden in tests.
 var profileBaseURL = "https://us-prof.np.community.playstation.net/userProfile/v1/users"
 
-// GetBulkPresence fetches the presence status for one or more PSN account IDs.
-func (c *Client) GetBulkPresence(accountIDs []string) ([]BasicPresence, error) {
+// GetPresence fetches the presence status for a single PSN account ID.
+func (c *Client) GetPresence(accountID string) (*BasicPresence, error) {
 	c.mu.Lock()
 	if err := c.ensureValidToken(); err != nil {
 		c.mu.Unlock()
@@ -24,9 +24,7 @@ func (c *Client) GetBulkPresence(accountIDs []string) ([]BasicPresence, error) {
 	accessToken := c.tokens.AccessToken
 	c.mu.Unlock()
 
-	ids := strings.Join(accountIDs, ",")
-	// Note: the double slash in the URL path is intentional and matches the PSN API format.
-	reqURL := presenceBaseURL + "//basicPresences?accountIds=" + ids
+	reqURL := fmt.Sprintf("%s/%s/basicPresences?type=primary", presenceBaseURL, accountID)
 
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
@@ -45,12 +43,13 @@ func (c *Client) GetBulkPresence(accountIDs []string) ([]BasicPresence, error) {
 		return nil, fmt.Errorf("presence request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var presenceResp PresenceResponse
+	var presenceResp BasicPresence
 	if err := json.NewDecoder(resp.Body).Decode(&presenceResp); err != nil {
 		return nil, fmt.Errorf("decoding presence response: %w", err)
 	}
+	presenceResp.AccountID = accountID
 
-	return presenceResp.BasicPresences, nil
+	return &presenceResp, nil
 }
 
 // IdentifyDriver checks presence for the given accounts and returns the one
@@ -61,26 +60,18 @@ func (c *Client) IdentifyDriver(accounts []AccountConfig) (accountID string, dri
 		return "", "", nil
 	}
 
-	ids := make([]string, len(accounts))
-	for i, a := range accounts {
-		ids[i] = a.AccountID
-	}
-
-	presences, err := c.GetBulkPresence(ids)
-	if err != nil {
-		return "", "", fmt.Errorf("fetching presence: %w", err)
-	}
-
-	// Build a map from account ID to driver name for quick lookup.
-	nameMap := make(map[string]string, len(accounts))
+	var matches []AccountConfig
 	for _, a := range accounts {
-		nameMap[a.AccountID] = a.DriverName
-	}
-
-	var matches []BasicPresence
-	for _, p := range presences {
-		if p.IsPlayingGT7() {
-			matches = append(matches, p)
+		if a.AccountID == "" {
+			continue
+		}
+		presence, err := c.GetPresence(a.AccountID)
+		if err != nil {
+			log.Printf("Warning: presence check failed for %s: %v", a.OnlineID, err)
+			continue
+		}
+		if presence.IsPlayingGT7() {
+			matches = append(matches, a)
 		}
 	}
 
@@ -91,8 +82,7 @@ func (c *Client) IdentifyDriver(accounts []AccountConfig) (accountID string, dri
 		return "", "", nil
 	}
 
-	match := matches[0]
-	return match.AccountID, nameMap[match.AccountID], nil
+	return matches[0].AccountID, matches[0].DriverName, nil
 }
 
 // profileResponse represents the relevant parts of a PSN profile lookup.
@@ -112,7 +102,7 @@ func (c *Client) ResolveOnlineID(onlineID string) (string, error) {
 	accessToken := c.tokens.AccessToken
 	c.mu.Unlock()
 
-	reqURL := fmt.Sprintf(profileBaseURL+"/%s/profile2", onlineID)
+	reqURL := fmt.Sprintf(profileBaseURL+"/%s/profile2?fields=accountId,onlineId,currentOnlineId", onlineID)
 
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {

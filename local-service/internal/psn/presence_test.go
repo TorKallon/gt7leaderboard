@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,7 +19,7 @@ func newTestClientWithToken(server *httptest.Server) *Client {
 	return client
 }
 
-func TestGetBulkPresence(t *testing.T) {
+func TestGetPresence(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("expected GET, got %s", r.Method)
@@ -29,27 +30,18 @@ func TestGetBulkPresence(t *testing.T) {
 			t.Errorf("unexpected Authorization: %q", auth)
 		}
 
-		ids := r.URL.Query().Get("accountIds")
-		if ids == "" {
-			t.Error("expected accountIds query parameter")
+		// Verify the URL format: /{accountId}/basicPresences?type=primary
+		if !strings.Contains(r.URL.Path, "/1234567890/basicPresences") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("type") != "primary" {
+			t.Errorf("expected type=primary, got %q", r.URL.Query().Get("type"))
 		}
 
-		resp := PresenceResponse{
-			BasicPresences: []BasicPresence{
-				{
-					AccountID:    "1234567890",
-					Availability: "availableToPlay",
-					GameTitleInfoList: []GameTitleInfo{
-						{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7", Format: "PS5"},
-					},
-				},
-				{
-					AccountID:    "9876543210",
-					Availability: "availableToPlay",
-					GameTitleInfoList: []GameTitleInfo{
-						{NpTitleID: "CUSA00001_00", TitleName: "Some Other Game", Format: "PS5"},
-					},
-				},
+		resp := BasicPresence{
+			Availability: "availableToPlay",
+			GameTitleInfoList: []GameTitleInfo{
+				{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7", Format: "PS5"},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -57,52 +49,43 @@ func TestGetBulkPresence(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Override the base URL for testing
 	oldURL := presenceBaseURL
 	presenceBaseURL = server.URL
 	defer func() { presenceBaseURL = oldURL }()
 
 	client := newTestClientWithToken(server)
 
-	presences, err := client.GetBulkPresence([]string{"1234567890", "9876543210"})
+	presence, err := client.GetPresence("1234567890")
 	if err != nil {
-		t.Fatalf("GetBulkPresence failed: %v", err)
+		t.Fatalf("GetPresence failed: %v", err)
 	}
 
-	if len(presences) != 2 {
-		t.Fatalf("expected 2 presences, got %d", len(presences))
+	if presence.AccountID != "1234567890" {
+		t.Errorf("expected account ID %q, got %q", "1234567890", presence.AccountID)
 	}
-
-	if presences[0].AccountID != "1234567890" {
-		t.Errorf("expected account ID %q, got %q", "1234567890", presences[0].AccountID)
-	}
-	if !presences[0].IsPlayingGT7() {
-		t.Error("first user should be playing GT7")
-	}
-	if presences[1].IsPlayingGT7() {
-		t.Error("second user should not be playing GT7")
+	if !presence.IsPlayingGT7() {
+		t.Error("user should be playing GT7")
 	}
 }
 
 func TestIdentifyDriver_OnePlayingGT7(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := PresenceResponse{
-			BasicPresences: []BasicPresence{
-				{
-					AccountID:    "111",
-					Availability: "availableToPlay",
-					GameTitleInfoList: []GameTitleInfo{
-						{NpTitleID: "CUSA00001_00", TitleName: "Other Game"},
-					},
+		// Respond per-account based on URL path.
+		var resp BasicPresence
+		if strings.Contains(r.URL.Path, "/111/") {
+			resp = BasicPresence{
+				Availability: "availableToPlay",
+				GameTitleInfoList: []GameTitleInfo{
+					{NpTitleID: "CUSA00001_00", TitleName: "Other Game"},
 				},
-				{
-					AccountID:    "222",
-					Availability: "availableToPlay",
-					GameTitleInfoList: []GameTitleInfo{
-						{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7", Format: "PS5"},
-					},
+			}
+		} else if strings.Contains(r.URL.Path, "/222/") {
+			resp = BasicPresence{
+				Availability: "availableToPlay",
+				GameTitleInfoList: []GameTitleInfo{
+					{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7", Format: "PS5"},
 				},
-			},
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
@@ -135,15 +118,10 @@ func TestIdentifyDriver_OnePlayingGT7(t *testing.T) {
 
 func TestIdentifyDriver_NonePlayingGT7(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := PresenceResponse{
-			BasicPresences: []BasicPresence{
-				{
-					AccountID:    "111",
-					Availability: "availableToPlay",
-					GameTitleInfoList: []GameTitleInfo{
-						{NpTitleID: "CUSA00001_00", TitleName: "Other Game"},
-					},
-				},
+		resp := BasicPresence{
+			Availability: "availableToPlay",
+			GameTitleInfoList: []GameTitleInfo{
+				{NpTitleID: "CUSA00001_00", TitleName: "Other Game"},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -176,18 +154,10 @@ func TestIdentifyDriver_NonePlayingGT7(t *testing.T) {
 
 func TestIdentifyDriver_MultiplePlayingGT7(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := PresenceResponse{
-			BasicPresences: []BasicPresence{
-				{
-					AccountID:         "111",
-					Availability:      "availableToPlay",
-					GameTitleInfoList:  []GameTitleInfo{{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7"}},
-				},
-				{
-					AccountID:         "222",
-					Availability:      "availableToPlay",
-					GameTitleInfoList:  []GameTitleInfo{{NpTitleID: GT7TitlePS4, TitleName: "Gran Turismo 7"}},
-				},
+		resp := BasicPresence{
+			Availability: "availableToPlay",
+			GameTitleInfoList: []GameTitleInfo{
+				{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7"},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")

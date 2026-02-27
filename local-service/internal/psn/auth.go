@@ -216,10 +216,13 @@ func (c *Client) SetTokens(tokens *Tokens) {
 	c.tokens = tokens
 }
 
-// GetTokens returns a copy of the current tokens.
+// GetTokens returns a copy of the current tokens, or nil if no tokens are set.
 func (c *Client) GetTokens() *Tokens {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.tokens == nil {
+		return nil
+	}
 	t := *c.tokens
 	return &t
 }

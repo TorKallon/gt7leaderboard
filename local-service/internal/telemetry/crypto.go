@@ -39,14 +39,15 @@ func DecryptPacket(data []byte) ([]byte, error) {
 	}
 
 	// Extract IV seed from offset 0x40 (4 bytes, little-endian).
-	ivSeed := binary.LittleEndian.Uint32(data[ivOffset : ivOffset+4])
+	iv1 := binary.LittleEndian.Uint32(data[ivOffset : ivOffset+4])
 
-	// XOR with magic mask.
-	ivSeed ^= ivXORMask
+	// XOR with magic mask to get iv2.
+	iv2 := iv1 ^ ivXORMask
 
-	// Build 8-byte nonce: ivSeed as little-endian uint32 in first 4 bytes, rest zero.
+	// Build 8-byte nonce: iv2 in first 4 bytes, original iv1 in last 4 bytes.
 	var nonce [8]byte
-	binary.LittleEndian.PutUint32(nonce[:4], ivSeed)
+	binary.LittleEndian.PutUint32(nonce[:4], iv2)
+	binary.LittleEndian.PutUint32(nonce[4:], iv1)
 
 	// Decrypt using Salsa20.
 	out := make([]byte, PacketSize)
