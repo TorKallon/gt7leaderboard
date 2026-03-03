@@ -39,6 +39,7 @@ func makePacketAt(x, y, z, vx, vy, vz, speed float32) *telemetry.Packet {
 		Position: telemetry.Vec3{X: x, Y: y, Z: z},
 		Velocity: telemetry.Vec3{X: vx, Y: vy, Z: vz},
 		CarSpeed: speed,
+		InRace:   true,
 	}
 }
 

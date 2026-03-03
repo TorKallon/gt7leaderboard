@@ -20,15 +20,34 @@ async function ensureCarExists(carId: number): Promise<void> {
   }
 }
 
-async function findOrCreateDriver(driverName: string): Promise<string> {
-  // Look up by display name first.
-  const existing = await db
-    .select({ id: drivers.id })
+async function findOrCreateDriver(psnAccountId: string | null, driverName: string): Promise<string> {
+  // Look up by PSN account ID first (most reliable).
+  if (psnAccountId) {
+    const byAccountId = await db
+      .select({ id: drivers.id })
+      .from(drivers)
+      .where(eq(drivers.psnAccountId, psnAccountId))
+      .limit(1);
+    if (byAccountId.length > 0) {
+      return byAccountId[0].id;
+    }
+  }
+
+  // Fall back to display name lookup.
+  const byName = await db
+    .select({ id: drivers.id, psnAccountId: drivers.psnAccountId })
     .from(drivers)
     .where(eq(drivers.displayName, driverName))
     .limit(1);
-  if (existing.length > 0) {
-    return existing[0].id;
+  if (byName.length > 0) {
+    // Backfill PSN account ID if we matched by name but it wasn't set.
+    if (psnAccountId && !byName[0].psnAccountId) {
+      await db
+        .update(drivers)
+        .set({ psnAccountId })
+        .where(eq(drivers.id, byName[0].id));
+    }
+    return byName[0].id;
   }
 
   // Create a new driver record.
@@ -37,6 +56,7 @@ async function findOrCreateDriver(driverName: string): Promise<string> {
     .values({
       displayName: driverName,
       psnOnlineId: driverName,
+      psnAccountId: psnAccountId,
     })
     .returning({ id: drivers.id });
   return result[0].id;
@@ -51,10 +71,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { driver_id, driver_name, track_slug, car_id, started_at, detection_method } = body;
 
-    // Resolve driver: prefer driver_id (UUID), fall back to finding/creating from driver_name.
-    let driverId: string | null = driver_id || null;
-    if (!driverId && driver_name) {
-      driverId = await findOrCreateDriver(driver_name);
+    // Resolve driver: driver_id from the collector is a PSN account ID (not a UUID).
+    // Use it along with driver_name to find or create the driver record.
+    let driverId: string | null = null;
+    if (driver_name) {
+      driverId = await findOrCreateDriver(driver_id || null, driver_name);
     }
 
     let trackId: string | null = null;

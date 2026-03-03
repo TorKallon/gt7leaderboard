@@ -99,13 +99,19 @@ type AccountConfig struct {
 }
 
 // IsPlayingGT7 checks whether the user is currently playing Gran Turismo 7,
-// matching by title ID (PS4 or PS5) or by title name (case-insensitive).
+// matching by title ID prefix (to handle regional variants) or by title name.
 func (bp *BasicPresence) IsPlayingGT7() bool {
 	for _, g := range bp.GameTitleInfoList {
-		if g.NpTitleID == GT7TitlePS5 || g.NpTitleID == GT7TitlePS4 {
+		// Match PS5 regional variants (PPSA01316_00 US, PPSA01317_00 EU, etc.)
+		if strings.HasPrefix(g.NpTitleID, "PPSA0131") {
 			return true
 		}
-		if strings.Contains(strings.ToLower(g.TitleName), "gran turismo 7") {
+		// Match PS4 regional variants
+		if strings.HasPrefix(g.NpTitleID, "CUSA2476") {
+			return true
+		}
+		// Fallback: title name contains "gran turismo" (handles ® and other symbols)
+		if strings.Contains(strings.ToLower(g.TitleName), "gran turismo") {
 			return true
 		}
 	}

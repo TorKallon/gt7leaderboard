@@ -43,13 +43,15 @@ func (c *Client) GetPresence(accountID string) (*BasicPresence, error) {
 		return nil, fmt.Errorf("presence request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var presenceResp BasicPresence
-	if err := json.NewDecoder(resp.Body).Decode(&presenceResp); err != nil {
+	var wrapper struct {
+		BasicPresence BasicPresence `json:"basicPresence"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
 		return nil, fmt.Errorf("decoding presence response: %w", err)
 	}
-	presenceResp.AccountID = accountID
+	wrapper.BasicPresence.AccountID = accountID
 
-	return &presenceResp, nil
+	return &wrapper.BasicPresence, nil
 }
 
 // IdentifyDriver checks presence for the given accounts and returns the one
@@ -70,6 +72,7 @@ func (c *Client) IdentifyDriver(accounts []AccountConfig) (accountID string, dri
 			log.Printf("Warning: presence check failed for %s: %v", a.OnlineID, err)
 			continue
 		}
+		log.Printf("Presence for %s: availability=%s, games=%+v", a.OnlineID, presence.Availability, presence.GameTitleInfoList)
 		if presence.IsPlayingGT7() {
 			matches = append(matches, a)
 		}

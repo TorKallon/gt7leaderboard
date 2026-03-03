@@ -38,10 +38,13 @@ func TestGetPresence(t *testing.T) {
 			t.Errorf("expected type=primary, got %q", r.URL.Query().Get("type"))
 		}
 
-		resp := BasicPresence{
-			Availability: "availableToPlay",
-			GameTitleInfoList: []GameTitleInfo{
-				{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7", Format: "PS5"},
+		// Real API wraps in {"basicPresence": {...}}
+		resp := map[string]BasicPresence{
+			"basicPresence": {
+				Availability: "availableToPlay",
+				GameTitleInfoList: []GameTitleInfo{
+					{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7", Format: "PS5"},
+				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -71,22 +74,23 @@ func TestGetPresence(t *testing.T) {
 func TestIdentifyDriver_OnePlayingGT7(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Respond per-account based on URL path.
-		var resp BasicPresence
+		var bp BasicPresence
 		if strings.Contains(r.URL.Path, "/111/") {
-			resp = BasicPresence{
+			bp = BasicPresence{
 				Availability: "availableToPlay",
 				GameTitleInfoList: []GameTitleInfo{
 					{NpTitleID: "CUSA00001_00", TitleName: "Other Game"},
 				},
 			}
 		} else if strings.Contains(r.URL.Path, "/222/") {
-			resp = BasicPresence{
+			bp = BasicPresence{
 				Availability: "availableToPlay",
 				GameTitleInfoList: []GameTitleInfo{
 					{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7", Format: "PS5"},
 				},
 			}
 		}
+		resp := map[string]BasicPresence{"basicPresence": bp}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}))
@@ -118,12 +122,13 @@ func TestIdentifyDriver_OnePlayingGT7(t *testing.T) {
 
 func TestIdentifyDriver_NonePlayingGT7(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := BasicPresence{
+		bp := BasicPresence{
 			Availability: "availableToPlay",
 			GameTitleInfoList: []GameTitleInfo{
 				{NpTitleID: "CUSA00001_00", TitleName: "Other Game"},
 			},
 		}
+		resp := map[string]BasicPresence{"basicPresence": bp}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}))
@@ -154,12 +159,13 @@ func TestIdentifyDriver_NonePlayingGT7(t *testing.T) {
 
 func TestIdentifyDriver_MultiplePlayingGT7(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := BasicPresence{
+		bp := BasicPresence{
 			Availability: "availableToPlay",
 			GameTitleInfoList: []GameTitleInfo{
 				{NpTitleID: GT7TitlePS5, TitleName: "Gran Turismo 7"},
 			},
 		}
+		resp := map[string]BasicPresence{"basicPresence": bp}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}))
@@ -244,9 +250,23 @@ func TestIsPlayingGT7(t *testing.T) {
 			expected: true,
 		},
 		{
+			name: "PS5 EU regional variant",
+			presence: BasicPresence{
+				GameTitleInfoList: []GameTitleInfo{{NpTitleID: "PPSA01317_00"}},
+			},
+			expected: true,
+		},
+		{
 			name: "title name match case insensitive",
 			presence: BasicPresence{
 				GameTitleInfoList: []GameTitleInfo{{NpTitleID: "UNKNOWN", TitleName: "GRAN TURISMO 7 - Digital Edition"}},
+			},
+			expected: true,
+		},
+		{
+			name:     "title name with registered trademark symbol",
+			presence: BasicPresence{
+				GameTitleInfoList: []GameTitleInfo{{NpTitleID: "UNKNOWN", TitleName: "Gran Turismo\u00ae 7"}},
 			},
 			expected: true,
 		},
