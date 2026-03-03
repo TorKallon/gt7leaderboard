@@ -143,6 +143,13 @@ func (m *Manager) HandlePacket(pkt *telemetry.Packet) {
 		// Car changed: end current session and start a new one.
 		m.endSessionLocked()
 		m.startSessionLocked(pkt, now)
+	} else if pkt.CurrentLap == 1 && m.currentSession.LastLap > 1 {
+		// Lap counter reset from >1 back to 1: a new race has started, potentially on a
+		// different track. End the current session and start fresh so track detection
+		// re-runs and laps are tagged with the correct track.
+		log.Printf("Race restart detected (lap %d -> 1), splitting session", m.currentSession.LastLap)
+		m.endSessionLocked()
+		m.startSessionLocked(pkt, now)
 	}
 
 	// Feed packet to track detector.
