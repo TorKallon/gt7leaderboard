@@ -68,7 +68,7 @@ type SessionConfig struct {
 
 // DataRefreshConfig holds settings for periodic car and track data refreshes.
 type DataRefreshConfig struct {
-	CarDataURL                string `mapstructure:"car_data_url"`
+	CarDataBaseURL            string `mapstructure:"car_data_base_url"`
 	CarRefreshIntervalHours   int    `mapstructure:"car_refresh_interval_hours"`
 	TrackDataRepo             string `mapstructure:"track_data_repo"`
 	TrackRefreshIntervalHours int    `mapstructure:"track_refresh_interval_hours"`

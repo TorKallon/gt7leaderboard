@@ -32,23 +32,47 @@ func (m *mockAPIClient) SyncTrack(track api.TrackSync) error {
 	return m.syncTrackErr
 }
 
+// --- Test CSV data ---
+
+const (
+	testCarsCSV     = "ID,ShortName,Maker\n100,Short Test Car,1\n200,Short Other Car,2\n"
+	testMakerCSV    = "ID,Name,Country\n1,TestMfr,US\n2,OtherMfr,JP\n"
+	testCarGrpCSV   = "ID,Group\n100,3\n200,N\n"
+	testStockPerf   = "carid,manufacturer,name,group,CH\n100,TestMfr,Test Car,3,500\n200,OtherMfr,Other Car,N,350\n"
+)
+
 // --- Tests ---
 
 func TestRefreshCars(t *testing.T) {
-	// Set up a test HTTP server that serves a CSV file.
-	csvData := "carid,manufacturer,name,group,CH\n100,TestMfr,Test Car,3,500\n200,OtherMfr,Other Car,N,350\n"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Set up a test HTTP server that serves four CSV files.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/data/db/cars.csv", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")
-		w.Write([]byte(csvData))
-	}))
+		w.Write([]byte(testCarsCSV))
+	})
+	mux.HandleFunc("/data/db/maker.csv", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		w.Write([]byte(testMakerCSV))
+	})
+	mux.HandleFunc("/data/db/cargrp.csv", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		w.Write([]byte(testCarGrpCSV))
+	})
+	mux.HandleFunc("/data-stock-perf.csv", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		w.Write([]byte(testStockPerf))
+	})
+
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
+	cacheDir := t.TempDir()
 	apiClient := &mockAPIClient{}
 	cfg := config.DataRefreshConfig{
-		CarDataURL: srv.URL,
+		CarDataBaseURL: srv.URL,
 	}
 
-	refresher := NewRefresher(cfg, nil, apiClient, metrics.NewNoop())
+	refresher := NewRefresher(cfg, cacheDir, nil, apiClient, metrics.NewNoop())
 
 	if err := refresher.RefreshCars(); err != nil {
 		t.Fatalf("RefreshCars() error: %v", err)
@@ -74,6 +98,9 @@ func TestRefreshCars(t *testing.T) {
 			if c.Category != "Gr.3" {
 				t.Errorf("expected category 'Gr.3', got %q", c.Category)
 			}
+			if c.Manufacturer != "TestMfr" {
+				t.Errorf("expected manufacturer 'TestMfr', got %q", c.Manufacturer)
+			}
 		}
 	}
 	if !found {
@@ -83,26 +110,35 @@ func TestRefreshCars(t *testing.T) {
 	if refresher.LastCarRefresh.IsZero() {
 		t.Error("expected LastCarRefresh to be set")
 	}
+
+	// Verify cache files were written.
+	for _, name := range []string{"cars.csv", "maker.csv", "cargrp.csv", "data-stock-perf.csv"} {
+		if _, err := os.Stat(filepath.Join(cacheDir, name)); err != nil {
+			t.Errorf("expected cache file %s to exist: %v", name, err)
+		}
+	}
 }
 
 func TestRefreshCarsEmptyURL(t *testing.T) {
 	cfg := config.DataRefreshConfig{}
-	refresher := NewRefresher(cfg, nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
 
 	err := refresher.RefreshCars()
 	if err == nil {
-		t.Fatal("expected error for empty car data URL")
+		t.Fatal("expected error for empty car data base URL")
 	}
 }
 
 func TestRefreshCarsHTTPError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-	}))
+	})
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	cfg := config.DataRefreshConfig{CarDataURL: srv.URL}
-	refresher := NewRefresher(cfg, nil, &mockAPIClient{}, metrics.NewNoop())
+	cfg := config.DataRefreshConfig{CarDataBaseURL: srv.URL}
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
 
 	err := refresher.RefreshCars()
 	if err == nil {
@@ -140,7 +176,7 @@ func TestRefreshTracks(t *testing.T) {
 	cfg := config.DataRefreshConfig{
 		TrackDataRepo: "owner/repo",
 	}
-	refresher := NewRefresher(cfg, nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
 	// Override the HTTP client's base URL approach by patching the refresher to use the test server.
 	// We need to modify the GitHub API URL. Since it's hardcoded, we'll use a workaround:
 	// Override the httpClient on the refresher and use a transport that rewrites URLs.
@@ -185,7 +221,7 @@ func TestRefreshTracks(t *testing.T) {
 	}
 
 	// Running again should not re-download (files already exist).
-	refresher2 := NewRefresher(cfg, nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher2 := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
 	refresher2.httpClient = srv.Client()
 	refresher2.httpClient.Transport = &rewriteTransport{
 		base:    http.DefaultTransport,
@@ -201,7 +237,7 @@ func TestRefreshTracks(t *testing.T) {
 
 func TestRefreshTracksEmptyRepo(t *testing.T) {
 	cfg := config.DataRefreshConfig{}
-	refresher := NewRefresher(cfg, nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
 
 	err := refresher.RefreshTracks(t.TempDir())
 	if err == nil {
@@ -211,7 +247,7 @@ func TestRefreshTracksEmptyRepo(t *testing.T) {
 
 func TestRefreshTracksInvalidRepoFormat(t *testing.T) {
 	cfg := config.DataRefreshConfig{TrackDataRepo: "invalid-no-slash"}
-	refresher := NewRefresher(cfg, nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
 
 	err := refresher.RefreshTracks(t.TempDir())
 	if err == nil {

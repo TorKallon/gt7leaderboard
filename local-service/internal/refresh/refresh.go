@@ -1,6 +1,7 @@
 package refresh
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rourkem/gt7leaderboard/local-service/internal/api"
@@ -24,51 +26,129 @@ type APIClient interface {
 	SyncTrack(api.TrackSync) error
 }
 
+// carDataFiles maps logical names to URL path suffixes relative to the base URL.
+var carDataFiles = map[string]string{
+	"cars.csv":           "/data/db/cars.csv",
+	"maker.csv":          "/data/db/maker.csv",
+	"cargrp.csv":         "/data/db/cargrp.csv",
+	"data-stock-perf.csv": "/data-stock-perf.csv",
+}
+
 // Refresher handles periodic refresh of car and track data.
 type Refresher struct {
-	carDataURL    string
-	trackDataRepo string
-	carDB         *cardb.Database
-	apiClient     APIClient
-	metrics       metrics.Metrics
-	httpClient    *http.Client
+	carDataBaseURL string
+	carCacheDir    string
+	trackDataRepo  string
+	carDB          *cardb.Database
+	apiClient      APIClient
+	metrics        metrics.Metrics
+	httpClient     *http.Client
 
 	LastCarRefresh   time.Time
 	LastTrackRefresh time.Time
 }
 
 // NewRefresher creates a new data refresher.
-func NewRefresher(cfg config.DataRefreshConfig, carDB *cardb.Database, apiClient APIClient, m metrics.Metrics) *Refresher {
+func NewRefresher(cfg config.DataRefreshConfig, carCacheDir string, carDB *cardb.Database, apiClient APIClient, m metrics.Metrics) *Refresher {
 	return &Refresher{
-		carDataURL:    cfg.CarDataURL,
-		trackDataRepo: cfg.TrackDataRepo,
-		carDB:         carDB,
-		apiClient:     apiClient,
-		metrics:       m,
-		httpClient:    &http.Client{Timeout: 60 * time.Second},
+		carDataBaseURL: cfg.CarDataBaseURL,
+		carCacheDir:    carCacheDir,
+		trackDataRepo:  cfg.TrackDataRepo,
+		carDB:          carDB,
+		apiClient:      apiClient,
+		metrics:        m,
+		httpClient:     &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
-// RefreshCars downloads the car CSV from the configured URL, parses it,
-// and syncs the data to the hosted API.
-func (r *Refresher) RefreshCars() error {
-	if r.carDataURL == "" {
-		return fmt.Errorf("car data URL not configured")
-	}
+// fetchResult holds the result of a single file download.
+type fetchResult struct {
+	name string
+	data []byte
+	err  error
+}
 
-	resp, err := r.httpClient.Get(r.carDataURL)
+// fetchBytes downloads a URL and returns its body as bytes.
+func (r *Refresher) fetchBytes(url string) ([]byte, error) {
+	resp, err := r.httpClient.Get(url)
 	if err != nil {
-		return fmt.Errorf("downloading car data: %w", err)
+		return nil, fmt.Errorf("downloading %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("car data download returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("%s returned status %d", url, resp.StatusCode)
 	}
 
-	db, err := cardb.LoadFromReader(resp.Body)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", url, err)
+	}
+	return data, nil
+}
+
+// saveCarCache writes downloaded CSV data to the cache directory.
+func saveCarCache(dir string, data map[string][]byte) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating cache dir: %w", err)
+	}
+	for name, content := range data {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// RefreshCars downloads the four car data CSVs from the configured base URL,
+// parses them, and syncs the data to the hosted API.
+func (r *Refresher) RefreshCars() error {
+	if r.carDataBaseURL == "" {
+		return fmt.Errorf("car data base URL not configured")
+	}
+
+	// Download all four files in parallel.
+	var wg sync.WaitGroup
+	results := make(chan fetchResult, len(carDataFiles))
+
+	for name, suffix := range carDataFiles {
+		wg.Add(1)
+		go func(name, url string) {
+			defer wg.Done()
+			data, err := r.fetchBytes(url)
+			results <- fetchResult{name: name, data: data, err: err}
+		}(name, r.carDataBaseURL+suffix)
+	}
+
+	wg.Wait()
+	close(results)
+
+	// Collect results — all-or-nothing.
+	downloaded := make(map[string][]byte, len(carDataFiles))
+	for res := range results {
+		if res.err != nil {
+			return fmt.Errorf("fetching %s: %w", res.name, res.err)
+		}
+		downloaded[res.name] = res.data
+	}
+
+	// Parse with LoadFromSources.
+	db, err := cardb.LoadFromSources(cardb.Sources{
+		Cars:      bytes.NewReader(downloaded["cars.csv"]),
+		Makers:    bytes.NewReader(downloaded["maker.csv"]),
+		CarGroups: bytes.NewReader(downloaded["cargrp.csv"]),
+		StockPerf: bytes.NewReader(downloaded["data-stock-perf.csv"]),
+	})
 	if err != nil {
 		return fmt.Errorf("parsing car data: %w", err)
+	}
+
+	// Save raw CSVs to cache (non-fatal if save fails).
+	if r.carCacheDir != "" {
+		if err := saveCarCache(r.carCacheDir, downloaded); err != nil {
+			log.Printf("Warning: failed to save car cache: %v", err)
+		}
 	}
 
 	// Build sync payload from the parsed database.

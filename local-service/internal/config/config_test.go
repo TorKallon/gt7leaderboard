@@ -39,7 +39,7 @@ session:
   idle_timeout_seconds: 45
 
 data_refresh:
-  car_data_url: "https://example.com/cars.csv"
+  car_data_base_url: "https://example.com/gt7info"
   track_data_repo: "owner/repo"
 `
 
@@ -122,8 +122,8 @@ data_refresh:
 	}
 
 	// DataRefresh - explicit + defaults
-	if cfg.DataRefresh.CarDataURL != "https://example.com/cars.csv" {
-		t.Errorf("DataRefresh.CarDataURL = %q", cfg.DataRefresh.CarDataURL)
+	if cfg.DataRefresh.CarDataBaseURL != "https://example.com/gt7info" {
+		t.Errorf("DataRefresh.CarDataBaseURL = %q", cfg.DataRefresh.CarDataBaseURL)
 	}
 	if cfg.DataRefresh.CarRefreshIntervalHours != 24 {
 		t.Errorf("DataRefresh.CarRefreshIntervalHours = %d, want 24 (default)", cfg.DataRefresh.CarRefreshIntervalHours)
