@@ -58,18 +58,17 @@ func main() {
 	defer m.Close()
 
 	// 4. Load car database.
-	carDataDir := filepath.Join(filepath.Dir(*configPath), "data", "cars")
-	carDBPath := filepath.Join(carDataDir, "cars.csv")
+	carCacheDir := filepath.Join(filepath.Dir(*configPath), "data", "cars", "raw")
 	var carDB *cardb.Database
-	if _, err := os.Stat(carDBPath); err == nil {
-		carDB, err = cardb.LoadFromFile(carDBPath)
+	if _, err := os.Stat(filepath.Join(carCacheDir, "cars.csv")); err == nil {
+		carDB, err = cardb.LoadFromDir(carCacheDir)
 		if err != nil {
-			log.Printf("Warning: failed to load car database from %s: %v", carDBPath, err)
+			log.Printf("Warning: failed to load car database from %s: %v", carCacheDir, err)
 		} else {
 			log.Printf("Loaded car database: %d cars", carDB.Count())
 		}
 	} else {
-		log.Printf("No car database found at %s, will be populated on first refresh", carDBPath)
+		log.Printf("No car database found at %s, will be populated on first refresh", carCacheDir)
 	}
 
 	// 5. Load track references.
@@ -156,7 +155,7 @@ func main() {
 	defer cancel()
 
 	// 11. Start data refresh scheduler.
-	refresher := refresh.NewRefresher(cfg.DataRefresh, carDB, apiClient, m)
+	refresher := refresh.NewRefresher(cfg.DataRefresh, carCacheDir, carDB, apiClient, m)
 	carInterval := time.Duration(cfg.DataRefresh.CarRefreshIntervalHours) * time.Hour
 	trackInterval := time.Duration(cfg.DataRefresh.TrackRefreshIntervalHours) * time.Hour
 	if carInterval <= 0 {

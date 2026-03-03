@@ -36,7 +36,7 @@ session:
   track_detection_min_points: 300
 
 data_refresh:
-  car_data_url: "https://ddm999.github.io/gt7info/data-stock-perf.csv"
+  car_data_base_url: "https://ddm999.github.io/gt7info"
   car_refresh_interval_hours: 24
   track_data_repo: "profittlich/gt7speedboard"
   track_refresh_interval_hours: 168

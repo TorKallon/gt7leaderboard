@@ -650,13 +650,58 @@ func TestCarDBLookupInNotifications(t *testing.T) {
 	}
 }
 
+func TestRaceRestartSplitsSession(t *testing.T) {
+	apiClient := &mockAPIClient{
+		createResp: &api.CreateSessionResponse{SessionID: "session-1"},
+	}
+	trackDet := &mockTrackDetector{}
+	mgr := newTestManager(apiClient, nil, trackDet, nil)
+
+	// Start a session and advance to lap 3.
+	mgr.HandlePacket(makePacket(100, 1, 0))
+	mgr.HandlePacket(makePacket(100, 2, 65000))
+	mgr.HandlePacket(makePacket(100, 3, 70000))
+
+	if len(apiClient.createCalls) != 1 {
+		t.Fatalf("expected 1 CreateSession call, got %d", len(apiClient.createCalls))
+	}
+
+	// Lap counter resets to 1 (new race started, potentially on a new track).
+	apiClient.createResp = &api.CreateSessionResponse{SessionID: "session-2"}
+	mgr.HandlePacket(makePacket(100, 1, 0))
+
+	if len(apiClient.endCalls) != 1 {
+		t.Fatalf("expected EndSession called once on race restart, got %d", len(apiClient.endCalls))
+	}
+	if apiClient.endCalls[0] != "session-1" {
+		t.Errorf("expected EndSession for session-1, got %s", apiClient.endCalls[0])
+	}
+	if len(apiClient.createCalls) != 2 {
+		t.Fatalf("expected 2 CreateSession calls after race restart, got %d", len(apiClient.createCalls))
+	}
+
+	session := mgr.CurrentSession()
+	if session == nil {
+		t.Fatal("expected active session after race restart")
+	}
+	if session.ID != "session-2" {
+		t.Errorf("expected new session ID 'session-2', got %q", session.ID)
+	}
+	// Track detector should be reset for the new session.
+	if trackDet.resetCount != 2 {
+		t.Errorf("expected track detector reset twice (session start + race restart), got %d", trackDet.resetCount)
+	}
+}
+
 // buildTestCarDB creates a small car database for testing.
 func buildTestCarDB(t *testing.T) *cardb.Database {
 	t.Helper()
-	csv := "carid,manufacturer,name,group,CH\n100,TestMfr,Test Car,3,500\n"
-	db, err := cardb.LoadFromReader(
-		strings.NewReader(csv),
-	)
+	db, err := cardb.LoadFromSources(cardb.Sources{
+		Cars:      strings.NewReader("ID,ShortName,Maker\n100,Short Test Car,1\n"),
+		Makers:    strings.NewReader("ID,Name,Country\n1,TestMfr,US\n"),
+		CarGroups: strings.NewReader("ID,Group\n100,3\n"),
+		StockPerf: strings.NewReader("carid,manufacturer,name,group,CH\n100,TestMfr,Test Car,3,500\n"),
+	})
 	if err != nil {
 		t.Fatalf("failed to load test car DB: %v", err)
 	}
