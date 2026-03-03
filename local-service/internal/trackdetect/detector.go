@@ -85,8 +85,10 @@ func (d *Detector) Reset() {
 // AddPoint processes a telemetry packet and returns a DetectionResult if the
 // track has been identified, or nil if detection is still in progress.
 func (d *Detector) AddPoint(pkt *telemetry.Packet) *DetectionResult {
-	// Ignore stationary points.
-	if pkt.CarSpeed <= 0 {
+	// Ignore packets that aren't from active racing — loading screens and
+	// menus can report non-zero speed with invalid position data, which
+	// would incorrectly eliminate track candidates.
+	if pkt.CarSpeed <= 0 || !pkt.InRace || pkt.IsLoading {
 		return nil
 	}
 

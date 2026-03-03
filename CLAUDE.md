@@ -25,3 +25,8 @@
 - UUIDs for all primary keys except Car (uses GT7 integer ID)
 - Config: Viper (Go), environment variables (web)
 - Metrics: Datadog (both services)
+
+## Notion Integration
+- Project Tracker Page: 317c085e-9118-8105-9ab7-e87ccadf164d
+- After completing significant work (features, bug fixes, refactors), update the project's Notion changelog by appending a dated entry with a summary of what changed.
+- Update the "Current Focus" and "Next Steps" properties as appropriate.
