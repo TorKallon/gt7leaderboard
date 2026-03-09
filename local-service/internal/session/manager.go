@@ -252,12 +252,11 @@ func (m *Manager) startSessionLocked(pkt *telemetry.Packet, now time.Time) {
 			log.Printf("Warning: failed to identify driver: %v", err)
 		}
 	}
-	// Fallback: if presence detection failed, use the first configured account.
-	// This handles rate-limiting, API errors, and single-PS5 households.
-	// When multiple people play, presence will disambiguate on the next session.
-	if driverName == "" && len(m.psnAccounts) > 0 {
-		driverName = m.psnAccounts[0].DriverName
-		log.Printf("Driver fallback: defaulting to %s (presence unavailable)", driverName)
+	// Fallback: if presence detection failed, use "Unknown".
+	// Driver can be corrected later in the dashboard.
+	if driverName == "" {
+		driverName = "Unknown"
+		log.Printf("Driver fallback: defaulting to Unknown (presence unavailable)")
 	}
 
 	// Look up car name for logging.
