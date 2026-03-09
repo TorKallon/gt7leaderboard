@@ -26,6 +26,7 @@ type SessionProvider interface {
 // Server serves the local web UI for status display and PSN token management.
 type Server struct {
 	addr       string
+	configPath string
 	cfg        *config.Config
 	psnClient  *psn.Client
 	sessions   SessionProvider
@@ -35,15 +36,16 @@ type Server struct {
 }
 
 // NewServer creates a new web UI server.
-func NewServer(addr string, cfg *config.Config, psnClient *psn.Client, sessions SessionProvider) *Server {
+func NewServer(addr string, cfg *config.Config, psnClient *psn.Client, sessions SessionProvider, configPath string) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html"))
 	return &Server{
-		addr:      addr,
-		cfg:       cfg,
-		psnClient: psnClient,
-		sessions:  sessions,
-		startedAt: time.Now(),
-		templates: tmpl,
+		addr:       addr,
+		configPath: configPath,
+		cfg:        cfg,
+		psnClient:  psnClient,
+		sessions:   sessions,
+		startedAt:  time.Now(),
+		templates:  tmpl,
 	}
 }
 
@@ -87,6 +89,7 @@ type statusData struct {
 	PSNTokenDays    int
 	PSNTokenWarning bool
 	PSNTokenMessage string
+	LeaderboardURL  string
 }
 
 // handleStatus renders the status page.
@@ -102,8 +105,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	uptime := time.Since(s.startedAt)
 	data := statusData{
-		Uptime:        formatDuration(uptime),
-		UptimeSeconds: int(uptime.Seconds()),
+		Uptime:         formatDuration(uptime),
+		UptimeSeconds:  int(uptime.Seconds()),
+		LeaderboardURL: s.cfg.API.Endpoint,
 	}
 
 	// Populate session info.
@@ -213,6 +217,15 @@ func (s *Server) handleAuthPost(w http.ResponseWriter, r *http.Request) {
 			Error: fmt.Sprintf("Authentication failed: %v", err),
 		})
 		return
+	}
+
+	// Persist the new token to the config file so it survives restarts.
+	if s.configPath != "" {
+		if err := updateNPSSOToken(s.configPath, npsso); err != nil {
+			log.Printf("Warning: failed to persist NPSSO token to config: %v", err)
+		} else {
+			log.Printf("NPSSO token persisted to %s", s.configPath)
+		}
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
