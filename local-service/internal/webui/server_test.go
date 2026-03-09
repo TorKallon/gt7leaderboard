@@ -25,7 +25,7 @@ func (m *mockSessionProvider) CurrentSession() *session.ActiveSession {
 // --- Tests ---
 
 func TestHealthEndpoint(t *testing.T) {
-	srv := NewServer(":0", &config.Config{}, nil, nil)
+	srv := NewServer(":0", &config.Config{}, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -56,7 +56,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestHealthEndpointMethodNotAllowed(t *testing.T) {
-	srv := NewServer(":0", &config.Config{}, nil, nil)
+	srv := NewServer(":0", &config.Config{}, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -70,7 +70,7 @@ func TestHealthEndpointMethodNotAllowed(t *testing.T) {
 
 func TestStatusPageNoSession(t *testing.T) {
 	sessions := &mockSessionProvider{session: nil}
-	srv := NewServer(":0", &config.Config{}, nil, sessions)
+	srv := NewServer(":0", &config.Config{}, nil, sessions, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -101,7 +101,7 @@ func TestStatusPageWithSession(t *testing.T) {
 			StartedAt:  time.Now(),
 		},
 	}
-	srv := NewServer(":0", &config.Config{}, nil, sessions)
+	srv := NewServer(":0", &config.Config{}, nil, sessions, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -122,7 +122,7 @@ func TestStatusPageWithSession(t *testing.T) {
 }
 
 func TestAuthPageGet(t *testing.T) {
-	srv := NewServer(":0", &config.Config{}, nil, nil)
+	srv := NewServer(":0", &config.Config{}, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	w := httptest.NewRecorder()
@@ -143,7 +143,7 @@ func TestAuthPageGet(t *testing.T) {
 }
 
 func TestAuthPagePostEmptyToken(t *testing.T) {
-	srv := NewServer(":0", &config.Config{}, nil, nil)
+	srv := NewServer(":0", &config.Config{}, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader("npsso="))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -162,7 +162,7 @@ func TestAuthPagePostEmptyToken(t *testing.T) {
 }
 
 func TestStatusPageNotFound(t *testing.T) {
-	srv := NewServer(":0", &config.Config{}, nil, nil)
+	srv := NewServer(":0", &config.Config{}, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	w := httptest.NewRecorder()

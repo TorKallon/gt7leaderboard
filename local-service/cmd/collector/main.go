@@ -167,7 +167,7 @@ func main() {
 	go refresher.StartScheduler(ctx, carInterval, trackInterval, trackDataDir)
 
 	// 12. Start local web UI.
-	webServer := webui.NewServer(defaultWebUIAddr, cfg, psnClient, sessionMgr)
+	webServer := webui.NewServer(defaultWebUIAddr, cfg, psnClient, sessionMgr, *configPath)
 	go func() {
 		if err := webServer.Start(ctx); err != nil {
 			log.Printf("Web UI error: %v", err)
