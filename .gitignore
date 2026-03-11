@@ -3,6 +3,7 @@ local-service/collector
 local-service/update-data
 local-service/bin/
 local-service/data/
+local-service/*.app/
 
 # Node
 web/node_modules/
