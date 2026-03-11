@@ -3,20 +3,20 @@
 
 playstation:
   ip: ""                       # PS5 IP address (leave empty for broadcast auto-discovery)
-  telemetry_send_port: 33739   # GT7 telemetry port (do not change)
-  telemetry_listen_port: 33740 # Local UDP listen port (do not change)
+  send_port: 33739             # GT7 telemetry port (do not change)
+  listen_port: 33740           # Local UDP listen port (do not change)
 
 psn:
   npsso_token: ""              # Set via web UI at http://localhost:8080/auth
   accounts:
-    - online_id: "your_psn_id"
-      driver_name: "Player 1"
-    # - online_id: "another_psn_id"
-    #   driver_name: "Player 2"
+    - online_id: "Tor_Kallon"
+      driver_name: "Tor_Kallon"
+    - online_id: "ArcaneRadz"
+      driver_name: "ArcaneRadz"
 
 api:
   endpoint: "https://gt7.mcnamara.io"
-  api_key: "your-shared-secret-here"
+  api_key: "generate-with-openssl-rand-hex-32"
 
 discord:
   webhook_url: ""              # Discord webhook URL (optional)
