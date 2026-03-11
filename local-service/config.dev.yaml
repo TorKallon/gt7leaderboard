@@ -1,17 +1,19 @@
 playstation:
-  ip: "192.168.1.100"
+  ip: "192.168.175.87"
   send_port: 33739
   listen_port: 33740
 
 psn:
-  npsso_token: ""
+  npsso_token: "sukU7MPQ4c146t0BkQT382viOLE3OYJ45e6aUpJ5glxYKvEmtqiexyXgKSEy4gOa"
   accounts:
-    - online_id: "dev_player"
-      driver_name: "Dev Player"
+    - online_id: "Tor_Kallon"
+      driver_name: "Tor_Kallon"
+    - online_id: "ArcaneRadz"
+      driver_name: "ArcaneRadz"
 
 api:
-  endpoint: "http://web:3000"
-  api_key: "dev-ingest-key"
+  endpoint: "http://localhost:3001"
+  api_key: "71cc7c7bc693058ff68fd223d935b992c1768b55572926f0aa7cb61809a8589a"
 
 discord:
   webhook_url: ""
@@ -23,10 +25,10 @@ datadog:
   enabled: false
 
 session:
-  idle_timeout_seconds: 30
+  idle_timeout_seconds: 600
 
 data_refresh:
-  car_data_url: "https://ddm999.github.io/gt7info/data-stock-perf.csv"
+  car_data_base_url: "https://ddm999.github.io/gt7info"
   car_refresh_interval_hours: 24
   track_data_repo: "profittlich/gt7speedboard"
   track_refresh_interval_hours: 168

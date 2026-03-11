@@ -1,0 +1,26 @@
+[Unit]
+Description=GT7 Telemetry Collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/gt7leaderboard/local-service
+ExecStart=/home/%i/gt7leaderboard/local-service/collector --config /home/%i/gt7leaderboard/local-service/config.yaml
+Restart=on-failure
+RestartSec=5
+
+# Logging goes to journald (view with: journalctl -u gt7-collector@<user>)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gt7-collector
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/gt7leaderboard/local-service/data
+
+[Install]
+WantedBy=multi-user.target
