@@ -14,6 +14,18 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // Allow public pages: leaderboard, track pages, driver pages
+  if (
+    pathname === '/' ||
+    pathname.startsWith('/tracks') ||
+    pathname.startsWith('/drivers') ||
+    pathname.startsWith('/api/tracks') ||
+    pathname.startsWith('/api/drivers') ||
+    pathname === '/api/status'
+  ) {
+    return NextResponse.next();
+  }
+
   // In dev without Google OAuth configured, skip authentication
   if (!process.env.GOOGLE_CLIENT_ID) {
     return NextResponse.next();
