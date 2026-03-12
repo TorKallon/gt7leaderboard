@@ -100,6 +100,37 @@ func NewManager(
 	}
 }
 
+// UpdatePSNAccounts replaces the PSN account list (e.g. after resolving account IDs).
+// If there is an active session with an "Unknown" driver, it retries detection.
+func (m *Manager) UpdatePSNAccounts(accounts []psn.AccountConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.psnAccounts = accounts
+
+	// Retry driver detection for sessions stuck with "Unknown".
+	if m.currentSession != nil && m.currentSession.DriverName == "Unknown" && m.driver != nil && len(accounts) > 0 {
+		driverID, driverName, err := m.driver.IdentifyDriver(accounts)
+		if err != nil {
+			log.Printf("Warning: retry driver detection failed: %v", err)
+			return
+		}
+		if driverName != "" {
+			m.currentSession.DriverID = driverID
+			m.currentSession.DriverName = driverName
+			log.Printf("Driver re-detected for session %s: %s", m.currentSession.ID, driverName)
+
+			// Update the session in the API.
+			updateReq := api.UpdateSessionRequest{
+				DriverID:   driverID,
+				DriverName: driverName,
+			}
+			if err := m.api.UpdateSession(m.currentSession.ID, updateReq); err != nil {
+				log.Printf("Error updating session with driver: %v", err)
+			}
+		}
+	}
+}
+
 // CurrentSession returns a copy of the current active session, or nil if none.
 func (m *Manager) CurrentSession() *ActiveSession {
 	m.mu.Lock()

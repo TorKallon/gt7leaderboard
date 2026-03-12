@@ -155,7 +155,16 @@ func main() {
 	defer cancel()
 
 	// 11. Start data refresh scheduler.
-	refresher := refresh.NewRefresher(cfg.DataRefresh, carCacheDir, carDB, apiClient, m)
+	onTrackReload := func(trackDir string) error {
+		newTracks, err := trackdetect.LoadAllTracks(trackDir)
+		if err != nil {
+			return err
+		}
+		trackDetector.ReloadTracks(newTracks)
+		log.Printf("Reloaded track references: %d tracks", len(newTracks))
+		return nil
+	}
+	refresher := refresh.NewRefresher(cfg.DataRefresh, carCacheDir, carDB, apiClient, m, onTrackReload)
 	carInterval := time.Duration(cfg.DataRefresh.CarRefreshIntervalHours) * time.Hour
 	trackInterval := time.Duration(cfg.DataRefresh.TrackRefreshIntervalHours) * time.Hour
 	if carInterval <= 0 {
@@ -167,7 +176,7 @@ func main() {
 	go refresher.StartScheduler(ctx, carInterval, trackInterval, trackDataDir)
 
 	// 12. Start local web UI.
-	webServer := webui.NewServer(defaultWebUIAddr, cfg, psnClient, sessionMgr, *configPath)
+	webServer := webui.NewServer(defaultWebUIAddr, cfg, psnClient, sessionMgr, psnAccounts, *configPath)
 	go func() {
 		if err := webServer.Start(ctx); err != nil {
 			log.Printf("Web UI error: %v", err)
@@ -232,7 +241,51 @@ func main() {
 		}
 	}()
 
-	// 15. Create telemetry listener with session manager's HandlePacket as handler.
+	// 15. Watch config file for NPSSO token changes (hot reload).
+	go func() {
+		lastToken := cfg.PSN.NpssoToken
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				reloaded, err := config.Load(*configPath)
+				if err != nil {
+					continue
+				}
+				newToken := reloaded.PSN.NpssoToken
+				if newToken == "" || newToken == lastToken {
+					continue
+				}
+				lastToken = newToken
+				log.Printf("Detected NPSSO token change in config file, re-authenticating...")
+				if err := psnClient.AuthenticateWithNPSSO(newToken); err != nil {
+					log.Printf("Warning: PSN re-authentication failed: %v", err)
+					continue
+				}
+				if tokens := psnClient.GetTokens(); tokens != nil {
+					log.Printf("PSN re-authenticated, refresh token expires in %d days", tokens.DaysUntilRefreshExpiry())
+				}
+				// Re-resolve account IDs with the new token.
+				for i, a := range psnAccounts {
+					if a.AccountID == "" && a.OnlineID != "" {
+						accountID, err := psnClient.ResolveOnlineID(a.OnlineID)
+						if err != nil {
+							log.Printf("Warning: could not resolve account ID for %s: %v", a.OnlineID, err)
+						} else {
+							psnAccounts[i].AccountID = accountID
+							log.Printf("Resolved %s -> account ID %s", a.OnlineID, accountID)
+						}
+					}
+				}
+				sessionMgr.UpdatePSNAccounts(psnAccounts)
+			}
+		}
+	}()
+
+	// 16. Create telemetry listener with session manager's HandlePacket as handler.
 	listener := telemetry.NewListener(
 		cfg.PlayStation.IP,
 		cfg.PlayStation.SendPort,
@@ -250,11 +303,11 @@ func main() {
 	log.Printf("  API endpoint: %s", cfg.API.Endpoint)
 	log.Printf("  Web UI: %s", defaultWebUIAddr)
 
-	// 16. Run telemetry listener (blocking).
+	// 17. Run telemetry listener (blocking).
 	if err := listener.Run(ctx); err != nil && ctx.Err() == nil {
 		log.Fatalf("Telemetry listener error: %v", err)
 	}
 
-	// 17. Graceful shutdown.
+	// 18. Graceful shutdown.
 	log.Printf("GT7 Collector shutting down...")
 }

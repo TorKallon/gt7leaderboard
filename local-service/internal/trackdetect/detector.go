@@ -68,6 +68,21 @@ func NewDetector(tracks []*TrackReference, config DetectorConfig) *Detector {
 	}
 }
 
+// ReloadTracks replaces the track references and resets all detection state.
+func (d *Detector) ReloadTracks(tracks []*TrackReference) {
+	candidates := make([]*candidateState, len(tracks))
+	for i, tr := range tracks {
+		candidates[i] = &candidateState{
+			track:      tr,
+			lastHitIdx: -1,
+		}
+	}
+	d.candidates = candidates
+	d.pointCount = 0
+	d.pendingResult = nil
+	d.postDetectCount = 0
+}
+
 // Reset clears all detection state so the detector can be reused.
 func (d *Detector) Reset() {
 	for _, c := range d.candidates {

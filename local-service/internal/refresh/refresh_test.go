@@ -72,7 +72,7 @@ func TestRefreshCars(t *testing.T) {
 		CarDataBaseURL: srv.URL,
 	}
 
-	refresher := NewRefresher(cfg, cacheDir, nil, apiClient, metrics.NewNoop())
+	refresher := NewRefresher(cfg, cacheDir, nil, apiClient, metrics.NewNoop(), nil)
 
 	if err := refresher.RefreshCars(); err != nil {
 		t.Fatalf("RefreshCars() error: %v", err)
@@ -121,7 +121,7 @@ func TestRefreshCars(t *testing.T) {
 
 func TestRefreshCarsEmptyURL(t *testing.T) {
 	cfg := config.DataRefreshConfig{}
-	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop(), nil)
 
 	err := refresher.RefreshCars()
 	if err == nil {
@@ -138,7 +138,7 @@ func TestRefreshCarsHTTPError(t *testing.T) {
 	defer srv.Close()
 
 	cfg := config.DataRefreshConfig{CarDataBaseURL: srv.URL}
-	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop(), nil)
 
 	err := refresher.RefreshCars()
 	if err == nil {
@@ -176,7 +176,7 @@ func TestRefreshTracks(t *testing.T) {
 	cfg := config.DataRefreshConfig{
 		TrackDataRepo: "owner/repo",
 	}
-	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop(), nil)
 	// Override the HTTP client's base URL approach by patching the refresher to use the test server.
 	// We need to modify the GitHub API URL. Since it's hardcoded, we'll use a workaround:
 	// Override the httpClient on the refresher and use a transport that rewrites URLs.
@@ -221,7 +221,7 @@ func TestRefreshTracks(t *testing.T) {
 	}
 
 	// Running again should not re-download (files already exist).
-	refresher2 := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher2 := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop(), nil)
 	refresher2.httpClient = srv.Client()
 	refresher2.httpClient.Transport = &rewriteTransport{
 		base:    http.DefaultTransport,
@@ -237,7 +237,7 @@ func TestRefreshTracks(t *testing.T) {
 
 func TestRefreshTracksEmptyRepo(t *testing.T) {
 	cfg := config.DataRefreshConfig{}
-	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop(), nil)
 
 	err := refresher.RefreshTracks(t.TempDir())
 	if err == nil {
@@ -247,7 +247,7 @@ func TestRefreshTracksEmptyRepo(t *testing.T) {
 
 func TestRefreshTracksInvalidRepoFormat(t *testing.T) {
 	cfg := config.DataRefreshConfig{TrackDataRepo: "invalid-no-slash"}
-	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop())
+	refresher := NewRefresher(cfg, "", nil, &mockAPIClient{}, metrics.NewNoop(), nil)
 
 	err := refresher.RefreshTracks(t.TempDir())
 	if err == nil {

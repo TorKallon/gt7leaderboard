@@ -39,6 +39,8 @@ type CreateSessionRequest struct {
 type UpdateSessionRequest struct {
 	TrackSlug       string `json:"track_slug,omitempty"`
 	DetectionMethod string `json:"detection_method,omitempty"`
+	DriverID        string `json:"driver_id,omitempty"`
+	DriverName      string `json:"driver_name,omitempty"`
 }
 
 // CreateSessionResponse is the response from session creation.

@@ -20,7 +20,7 @@ SyslogIdentifier=gt7-collector
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/%i/gt7leaderboard/local-service/data
+ReadWritePaths=/home/%i/gt7leaderboard/local-service/data /home/%i/gt7leaderboard/local-service/config.yaml
 
 [Install]
 WantedBy=multi-user.target

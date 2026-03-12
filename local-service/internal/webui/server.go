@@ -21,31 +21,34 @@ var templateFS embed.FS
 // SessionProvider returns the current active session, if any.
 type SessionProvider interface {
 	CurrentSession() *session.ActiveSession
+	UpdatePSNAccounts([]psn.AccountConfig)
 }
 
 // Server serves the local web UI for status display and PSN token management.
 type Server struct {
-	addr       string
-	configPath string
-	cfg        *config.Config
-	psnClient  *psn.Client
-	sessions   SessionProvider
-	startedAt  time.Time
-	templates  *template.Template
-	httpServer *http.Server
+	addr        string
+	configPath  string
+	cfg         *config.Config
+	psnClient   *psn.Client
+	psnAccounts []psn.AccountConfig
+	sessions    SessionProvider
+	startedAt   time.Time
+	templates   *template.Template
+	httpServer  *http.Server
 }
 
 // NewServer creates a new web UI server.
-func NewServer(addr string, cfg *config.Config, psnClient *psn.Client, sessions SessionProvider, configPath string) *Server {
+func NewServer(addr string, cfg *config.Config, psnClient *psn.Client, sessions SessionProvider, psnAccounts []psn.AccountConfig, configPath string) *Server {
 	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html"))
 	return &Server{
-		addr:       addr,
-		configPath: configPath,
-		cfg:        cfg,
-		psnClient:  psnClient,
-		sessions:   sessions,
-		startedAt:  time.Now(),
-		templates:  tmpl,
+		addr:        addr,
+		configPath:  configPath,
+		cfg:         cfg,
+		psnClient:   psnClient,
+		psnAccounts: psnAccounts,
+		sessions:    sessions,
+		startedAt:   time.Now(),
+		templates:   tmpl,
 	}
 }
 
@@ -217,6 +220,23 @@ func (s *Server) handleAuthPost(w http.ResponseWriter, r *http.Request) {
 			Error: fmt.Sprintf("Authentication failed: %v", err),
 		})
 		return
+	}
+
+	// Resolve online IDs to account IDs now that we have a valid token.
+	for i, a := range s.psnAccounts {
+		if a.AccountID == "" && a.OnlineID != "" {
+			accountID, err := s.psnClient.ResolveOnlineID(a.OnlineID)
+			if err != nil {
+				log.Printf("Warning: could not resolve account ID for %s: %v", a.OnlineID, err)
+			} else {
+				s.psnAccounts[i].AccountID = accountID
+				log.Printf("Resolved %s -> account ID %s", a.OnlineID, accountID)
+			}
+		}
+	}
+	// Push updated accounts to the session manager so driver detection works.
+	if s.sessions != nil {
+		s.sessions.UpdatePSNAccounts(s.psnAccounts)
 	}
 
 	// Persist the new token to the config file so it survives restarts.

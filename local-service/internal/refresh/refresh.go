@@ -34,6 +34,10 @@ var carDataFiles = map[string]string{
 	"data-stock-perf.csv": "/data-stock-perf.csv",
 }
 
+// TrackReloadFunc is called after new track files are downloaded so the
+// detector can reload its references from disk.
+type TrackReloadFunc func(trackDir string) error
+
 // Refresher handles periodic refresh of car and track data.
 type Refresher struct {
 	carDataBaseURL string
@@ -43,13 +47,16 @@ type Refresher struct {
 	apiClient      APIClient
 	metrics        metrics.Metrics
 	httpClient     *http.Client
+	onTrackReload  TrackReloadFunc
 
 	LastCarRefresh   time.Time
 	LastTrackRefresh time.Time
 }
 
-// NewRefresher creates a new data refresher.
-func NewRefresher(cfg config.DataRefreshConfig, carCacheDir string, carDB *cardb.Database, apiClient APIClient, m metrics.Metrics) *Refresher {
+// NewRefresher creates a new data refresher. The optional onTrackReload
+// callback is invoked after new track files are downloaded so that the
+// detector can reload its references from disk.
+func NewRefresher(cfg config.DataRefreshConfig, carCacheDir string, carDB *cardb.Database, apiClient APIClient, m metrics.Metrics, onTrackReload TrackReloadFunc) *Refresher {
 	return &Refresher{
 		carDataBaseURL: cfg.CarDataBaseURL,
 		carCacheDir:    carCacheDir,
@@ -58,6 +65,7 @@ func NewRefresher(cfg config.DataRefreshConfig, carCacheDir string, carDB *cardb
 		apiClient:      apiClient,
 		metrics:        m,
 		httpClient:     &http.Client{Timeout: 60 * time.Second},
+		onTrackReload:  onTrackReload,
 	}
 }
 
@@ -252,6 +260,15 @@ func (r *Refresher) RefreshTracks(localDir string) error {
 	r.LastTrackRefresh = time.Now()
 	r.metrics.Incr("refresh.tracks", nil)
 	log.Printf("Refreshed track data: %d new files downloaded", downloaded)
+
+	// Reload track references into the detector if any new files were downloaded
+	// (or on first run when the detector may have been initialized with 0 tracks).
+	if downloaded > 0 && r.onTrackReload != nil {
+		if err := r.onTrackReload(localDir); err != nil {
+			log.Printf("Warning: failed to reload track references: %v", err)
+		}
+	}
+
 	return nil
 }
 
