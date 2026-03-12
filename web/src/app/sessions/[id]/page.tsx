@@ -14,6 +14,7 @@ interface SessionDetail {
   id: string;
   driver_id: string | null;
   driver_name: string | null;
+  auto_detected_driver_name: string | null;
   track_name: string | null;
   track_slug: string | null;
   car_name: string | null;
@@ -43,6 +44,7 @@ async function getSessionDetail(
         s.id,
         s.driver_id,
         d.display_name AS driver_name,
+        ad.display_name AS auto_detected_driver_name,
         t.name AS track_name,
         t.slug AS track_slug,
         s.car_id,
@@ -55,6 +57,13 @@ async function getSessionDetail(
       LEFT JOIN drivers d ON d.id = s.driver_id
       LEFT JOIN tracks t ON t.id = s.track_id
       LEFT JOIN cars c ON c.id = s.car_id
+      LEFT JOIN LATERAL (
+        SELECT DISTINCT lr.auto_detected_driver_id
+        FROM lap_records lr
+        WHERE lr.session_id = s.id AND lr.auto_detected_driver_id IS NOT NULL
+        LIMIT 1
+      ) orig ON true
+      LEFT JOIN drivers ad ON ad.id = orig.auto_detected_driver_id
       WHERE s.id = ${id}
     `);
 
@@ -128,6 +137,12 @@ export default async function SessionDetailPage({
             ) : (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-900/40 text-orange-300 border border-orange-700/40">
                 Unknown Driver
+              </span>
+            )}
+            {session.auto_detected_driver_name &&
+              session.auto_detected_driver_name !== session.driver_name && (
+              <span className="text-xs text-neutral-500">
+                (originally detected: {session.auto_detected_driver_name})
               </span>
             )}
             {session.track_name && (
