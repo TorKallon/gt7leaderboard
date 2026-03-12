@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { db } from '@/lib/db';
 import { sql } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
@@ -6,6 +8,7 @@ import { formatLapTime } from '@/components/lap-time';
 import { ReassignDialog } from '@/components/reassign-dialog';
 import { WeatherTag } from '@/components/weather-tag';
 import { LapReassignDialog } from '@/components/lap-reassign-dialog';
+import { DeleteSessionDialog } from '@/components/delete-session-dialog';
 
 interface SessionDetail {
   id: string;
@@ -143,10 +146,13 @@ export default async function SessionDetailPage({
           </div>
         </div>
 
-        <ReassignDialog
-          sessionId={session.id}
-          currentDriverId={session.driver_id}
-        />
+        <div className="flex gap-2">
+          <ReassignDialog
+            sessionId={session.id}
+            currentDriverId={session.driver_id}
+          />
+          <DeleteSessionDialog sessionId={session.id} />
+        </div>
       </div>
 
       {/* Session metadata */}

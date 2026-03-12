@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
 import { sessions, lapRecords } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, isNull, and } from 'drizzle-orm';
 
 export async function PATCH(
   request: Request,
@@ -19,24 +20,46 @@ export async function PATCH(
       );
     }
 
-    // Update session driver
-    const sessionResult = await db
-      .update(sessions)
-      .set({
-        driverId: driver_id,
-        updatedAt: new Date(),
-      })
+    // Snapshot the current driver as auto-detected (only if not already set)
+    // so the original assignment is preserved for audit.
+    const sessionRows = await db
+      .select({ driverId: sessions.driverId })
+      .from(sessions)
       .where(eq(sessions.id, id))
-      .returning({ id: sessions.id });
+      .limit(1);
 
-    if (sessionResult.length === 0) {
+    if (sessionRows.length === 0) {
       return NextResponse.json(
         { error: 'Session not found' },
         { status: 404 }
       );
     }
 
-    // Update all lap records in the session (preserve auto_detected_driver_id)
+    const originalDriverId = sessionRows[0].driverId;
+
+    // Save original driver to autoDetectedDriverId on laps that don't have one yet.
+    if (originalDriverId) {
+      await db
+        .update(lapRecords)
+        .set({ autoDetectedDriverId: originalDriverId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(lapRecords.sessionId, id),
+            isNull(lapRecords.autoDetectedDriverId)
+          )
+        );
+    }
+
+    // Update session driver
+    await db
+      .update(sessions)
+      .set({
+        driverId: driver_id,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, id));
+
+    // Update all lap records in the session
     await db
       .update(lapRecords)
       .set({
@@ -44,6 +67,9 @@ export async function PATCH(
         updatedAt: new Date(),
       })
       .where(eq(lapRecords.sessionId, id));
+
+    revalidatePath('/sessions');
+    revalidatePath(`/sessions/${id}`);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

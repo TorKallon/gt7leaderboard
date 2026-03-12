@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { sql } from 'drizzle-orm';
+import { sessions, lapRecords } from '@/lib/db/schema';
+import { sql, eq } from 'drizzle-orm';
 
 export async function GET(
   _request: Request,
@@ -65,6 +66,38 @@ export async function GET(
     console.error('Failed to get session:', error);
     return NextResponse.json(
       { error: 'Failed to get session' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // Delete child lap records first (no cascade on FK)
+    await db.delete(lapRecords).where(eq(lapRecords.sessionId, id));
+
+    const result = await db
+      .delete(sessions)
+      .where(eq(sessions.id, id))
+      .returning({ id: sessions.id });
+
+    if (result.length === 0) {
+      return NextResponse.json(
+        { error: 'Session not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ deleted: true });
+  } catch (error) {
+    console.error('Failed to delete session:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete session' },
       { status: 500 }
     );
   }
