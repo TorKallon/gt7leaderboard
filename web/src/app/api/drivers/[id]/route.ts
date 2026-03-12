@@ -45,8 +45,30 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+
+    // Only allow editing guest drivers
+    const existing = await db
+      .select({ isGuest: drivers.isGuest })
+      .from(drivers)
+      .where(eq(drivers.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return NextResponse.json(
+        { error: 'Driver not found' },
+        { status: 404 }
+      );
+    }
+
+    if (!existing[0].isGuest) {
+      return NextResponse.json(
+        { error: 'Only guest drivers can be edited' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
-    const { display_name } = body;
+    const { display_name, psn_online_id } = body;
 
     const updates: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -54,6 +76,10 @@ export async function PATCH(
 
     if (display_name !== undefined) {
       updates.displayName = display_name;
+    }
+
+    if (psn_online_id !== undefined) {
+      updates.psnOnlineId = psn_online_id;
     }
 
     const result = await db

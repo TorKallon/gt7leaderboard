@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { sql } from 'drizzle-orm';
 import { AddDriverForm } from './add-driver-form';
+import { EditDriverDialog } from './edit-driver-dialog';
 
 interface CollectorInfo {
   collector_online: boolean;
@@ -181,9 +182,18 @@ export default async function SettingsPage() {
                       </span>
                     )}
                   </div>
-                  <span className="text-xs text-neutral-600 font-mono">
-                    {driver.id.slice(0, 8)}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {driver.is_guest && (
+                      <EditDriverDialog
+                        driverId={driver.id}
+                        initialName={driver.display_name}
+                        initialPsnOnlineId={driver.psn_online_id}
+                      />
+                    )}
+                    <span className="text-xs text-neutral-600 font-mono">
+                      {driver.id.slice(0, 8)}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

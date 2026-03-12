@@ -5,6 +5,7 @@ import { DriverBadge } from '@/components/driver-badge';
 import { formatLapTime } from '@/components/lap-time';
 import { ReassignDialog } from '@/components/reassign-dialog';
 import { WeatherTag } from '@/components/weather-tag';
+import { LapReassignDialog } from '@/components/lap-reassign-dialog';
 
 interface SessionDetail {
   id: string;
@@ -23,6 +24,7 @@ interface SessionLap {
   id: string;
   lap_number: number;
   lap_time_ms: number;
+  driver_id: string | null;
   driver_name: string | null;
   weather: string;
   is_valid: boolean;
@@ -60,6 +62,7 @@ async function getSessionDetail(
         lr.id,
         lr.lap_number,
         lr.lap_time_ms,
+        lr.driver_id,
         d.display_name AS driver_name,
         lr.weather,
         lr.is_valid,
@@ -201,6 +204,7 @@ export default async function SessionDetailPage({
                 <thead>
                   <tr className="border-b border-neutral-800 text-neutral-500 text-xs uppercase tracking-wider">
                     <th className="px-4 py-3 text-left w-16">Lap</th>
+                    <th className="px-4 py-3 text-left">Driver</th>
                     <th className="px-4 py-3 text-right">Time</th>
                     <th className="px-4 py-3 text-right hidden sm:table-cell">
                       Delta
@@ -232,6 +236,13 @@ export default async function SessionDetailPage({
                       >
                         <td className="px-4 py-3 font-mono text-neutral-400">
                           {lap.lap_number}
+                        </td>
+                        <td className="px-4 py-3">
+                          <LapReassignDialog
+                            lapId={lap.id}
+                            currentDriverName={lap.driver_name}
+                            currentDriverId={lap.driver_id}
+                          />
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span
