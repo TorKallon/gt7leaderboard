@@ -9,10 +9,10 @@ playstation:
 psn:
   npsso_token: ""              # Set via web UI at http://localhost:8080/auth
   accounts:
-    - online_id: "Tor_Kallon"
-      driver_name: "Tor_Kallon"
-    - online_id: "ArcaneRadz"
-      driver_name: "ArcaneRadz"
+    - online_id: "your_psn_id"
+      driver_name: "Player 1"
+    # - online_id: "another_psn_id"
+    #   driver_name: "Player 2"
 
 api:
   endpoint: "https://gt7.mcnamara.io"
