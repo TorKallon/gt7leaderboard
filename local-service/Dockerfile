@@ -11,6 +11,6 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /build/collector .
 COPY data/ ./data/
-EXPOSE 33740/udp 8080
+EXPOSE 33740/udp 8081
 ENTRYPOINT ["./collector"]
 CMD ["--config", "/app/config.yaml"]

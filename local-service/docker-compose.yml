@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "33740:33740/udp"   # GT7 telemetry listen
-      - "8080:8080"          # Local web UI
+      - "8081:8081"          # Local web UI
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data     # Persistent cache for car/track data

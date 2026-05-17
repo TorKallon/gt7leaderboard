@@ -7,7 +7,7 @@ playstation:
   listen_port: 33740           # Local UDP listen port (do not change)
 
 psn:
-  npsso_token: ""              # Set via web UI at http://localhost:8080/auth
+  npsso_token: ""              # Set via web UI at http://localhost:8081/auth
   accounts:
     - online_id: "your_psn_id"
       driver_name: "Player 1"
